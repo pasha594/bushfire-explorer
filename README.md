@@ -2,7 +2,7 @@
 
 A live map of bushfires across Australia, modelled on [fires.cornea.is](https://fires.cornea.is/). It has a national map with a ranked list of fires, a page for each state, and a page for each fire. Fire pages show the official warning, perimeter, nearby satellite hotspots, weather, air quality, fire danger rating and vegetation.
 
-**Live site:** https://pasha594.github.io/bushfire-explorer/
+**Live site:** https://bushfiremap.com
 
 The whole app is one static `index.html`. It has no server, build step or API keys. Each visitor's browser fetches the agencies' public feeds directly and refreshes them every 1–5 minutes.
 
