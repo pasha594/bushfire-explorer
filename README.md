@@ -27,7 +27,7 @@ Old `#/state/xx` links redirect to `/xx/` in the browser.
 | `404.html` | Static "page not found" page |
 | `robots.txt`, `sitemap.xml` | Crawler files |
 | `lib/` | Leaflet 1.9.4 and Leaflet.markercluster 1.5.3, self-hosted |
-| `assets/` | Favicons and the link-preview image |
+| `assets/`, `manifest.webmanifest` | Icons, the link-preview image and the install manifest |
 | `82b76f7cece95c4cc99778a7ff98bc75.txt` | IndexNow key file (lets the site notify Bing and other engines of changed URLs) |
 
 ### Build step
