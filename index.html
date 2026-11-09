@@ -452,6 +452,25 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
 @media (max-width: 720px) { .rhead .h-state, .rhead .h-cont { display: none; } }
 
 </style>
+<script>
+  // PostHog product analytics (anonymous), project 723308 in the "Bushfire Map" org. POSTHOG_KEY is the project's public ingestion key (phc_…), which is safe to publish.
+  // Only runs on the live site so local testing doesn't pollute the data.
+  (function () {
+    var POSTHOG_KEY = 'phc_rvkR3vjpdScbwkJCGj8ByvjbCK5fPoRkx5QMuU58eHao';
+    if (!/^phc_/.test(POSTHOG_KEY) || !/(^|\.)bushfiremap\.com$/.test(location.hostname)) return;
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],Object.defineProperty(u,"toString",{configurable:!0,enumerable:!0,writable:!0,value:function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e}}),Object.defineProperty(u.people,"toString",{configurable:!0,enumerable:!0,writable:!0,value:function(){return u.toString(1)+".people (stub)"}}),o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagResult isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init(POSTHOG_KEY, {
+      api_host: 'https://us.i.posthog.com',
+      defaults: '2026-08-30',
+      person_profiles: 'identified_only', // anonymous visitors only; no person profiles
+      capture_pageview: false,            // the app sends one $pageview per in-page route (#/state/…, #/fire/…)
+      capture_pageleave: true,
+      autocapture: true,
+      disable_session_recording: true,
+      respect_dnt: true,
+    });
+  })();
+</script>
 </head>
 <body>
 <header class="masthead">
@@ -475,6 +494,7 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
 <footer class="foot">
   <div class="foot-inner">
     <p class="foot-warn"><strong>Bushfire Explorer is for informational purposes only.</strong> It is not a replacement for official sources. Always follow advice and warnings from your state fire agency and emergency broadcaster. In an emergency call <strong>000</strong>.</p>
+    <p class="foot-warn" style="font-size:13px">This site uses <a href="https://posthog.com" target="_blank" rel="noopener">PostHog</a> for anonymous usage analytics (pages viewed and features used). It does not collect names, emails or accounts.</p>
     <div class="foot-cols">
       <div><h4>Australian data sources</h4><p id="foot-sources">NSW RFS · VicEmergency · QFD · SA CFS · DFES · TFS · ACT ESA · Geoscience Australia · Bureau of Meteorology (via Esri) · NAFI · Open-Meteo</p><button type="button" class="linkbtn" id="foot-sources-btn">Feed status &amp; licences</button></div>
       <div><h4>Explore</h4><p id="foot-states"></p></div>
@@ -4093,7 +4113,7 @@ AUF.util = (function () {
     const saved = curKey !== key ? navMem.get(key) : null;
     curKey = key; S.route = r; closeMenu();
     S.pending = r.anchor ? { anchor: r.anchor, until: Date.now() + PENDING_MS } : saved ? { y: saved.y, until: Date.now() + PENDING_MS } : null;
-    if (!same) { S.fitPending = true; S.table.page = saved ? saved.page : 1; S.warnAll = saved ? saved.warnAll : false; renderView(true); }
+    if (!same) { S.fitPending = true; S.table.page = saved ? saved.page : 1; S.warnAll = saved ? saved.warnAll : false; trackRoute(r); renderView(true); }
     else if (saved && !r.anchor) window.scrollTo(0, saved.y);
     if (r.anchor) requestAnimationFrame(() => { const el = document.getElementById(r.anchor); if (el) el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); });
   }
@@ -4128,6 +4148,18 @@ AUF.util = (function () {
   const KEEP = ['fdrtable', 'p-now', 'p-wx', 'p-fdr', 'p-veg', 'p-hot', 'd-town', 'd-park', 'f-lga'];
   const isPlaceholder = (el) => !!el.querySelector('.loading') || /^[…—]?$/.test(el.textContent.trim());
   // isNav: a route change. fromRefresh: a background data refresh (scheduleRender); everything else is a user action.
+  // Analytics: no-op unless PostHog loaded (live site only). The snippet's stub queues calls made before the library arrives.
+  const track = (event, props) => { try { if (window.posthog && window.posthog.capture) window.posthog.capture(event, props || {}); } catch (e) { /* never break the page */ } };
+  let trackedFire = null, searchTimer = 0;
+  function trackRoute(r) {
+    trackedFire = null;
+    track('$pageview', { $current_url: location.href, view: r.view, state: r.st || null, fire_uid: r.view === 'fire' ? r.uid : null });
+  }
+  function trackFire(f) {
+    if (!f || trackedFire === f.uid) return;
+    trackedFire = f.uid;
+    track('fire_viewed', { fire_uid: f.uid, state: f.state, source: f.source, kind: f.kind, status: f.status, alert: f.alert || 'none', size_ha: f.sizeHa != null ? Math.round(f.sizeHa) : null, has_perimeter: !!f.geometry });
+  }
   function renderView(isNav, fromRefresh) {
     const view = $('#view'), active = document.activeElement;
     // Replacing the search box mid-composition breaks IME / Android keyboard input, and replacing the overlay <select>
@@ -4147,7 +4179,7 @@ AUF.util = (function () {
     const r = S.route;
     let html = '', title = 'Bushfire Explorer';
     if (r.view === 'state') { html = stateView(r.st); title = STATE_NAME[r.st] + ' Fires Map | Bushfire Explorer'; }
-    else if (r.view === 'fire') { const f = S.fireByUid.get(r.uid); html = fireView(f, r.uid); title = f ? prettyName(f.name) + ' | ' + STATE_NAME[f.state] + ' | Bushfire Explorer' : title; }
+    else if (r.view === 'fire') { const f = S.fireByUid.get(r.uid); html = fireView(f, r.uid); trackFire(f); title = f ? prettyName(f.name) + ' | ' + STATE_NAME[f.state] + ' | Bushfire Explorer' : title; }
     else if (r.view === 'warning') { html = warningView(S.warnings.find(w => w.uid === r.uid), r.uid); }
     else { html = homeView(); title = 'Bushfire Explorer | Live Bushfire Map & Incident Data for Australia'; }
     document.title = title;
@@ -4510,18 +4542,18 @@ AUF.util = (function () {
   function persist() { prefs.ui = { extents: S.ui.extents, warnAreas: S.ui.warnAreas, show: S.ui.show }; prefs.table = Object.assign({}, S.table, { q: '', page: 1 }); savePrefs(); }
   function afterRender() {
     const v = $('#view');
-    const ov = $('#overlay', v); if (ov) ov.onchange = () => { S.ui.overlay = ov.value; persist(); renderView(false); };
-    const se = $('#sw-ext', v); if (se) se.onchange = () => { S.ui.extents = se.checked; persist(); drawMap(true); };
-    const sw = $('#sw-warn', v); if (sw) sw.onchange = () => { S.ui.warnAreas = sw.checked; persist(); drawMap(true); };
-    const ss = $('#sw-sat', v); if (ss) ss.onchange = () => { satOn = ss.checked; drawMap(true); };
-    v.querySelectorAll('[data-show]').forEach(b => b.onclick = () => { const k = b.dataset.show; S.ui.show[k] = !S.ui.show[k]; persist(); b.setAttribute('aria-pressed', S.ui.show[k]); drawMap(true); });
-    v.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { S.ui.overlay = b.dataset.tab === 'forecast' ? 'danger' : 'hotspots'; persist(); renderView(false); });
-    v.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { S.ui.dangerDay = +b.dataset.day; persist(); renderView(false); });
-    const rq = $('#rq', v); if (rq) rq.oninput = (e) => { S.table.q = rq.value; S.table.page = 1; if (!e.isComposing && !composing) renderView(false); }; // compositionend renders
-    v.querySelectorAll('input[name="rk"]').forEach(x => x.onchange = () => { S.table.kind = x.value; S.table.page = 1; persist(); renderView(false); });
-    const rc = $('#rctl', v); if (rc) rc.onchange = () => { S.table.controlled = rc.checked; S.table.page = 1; persist(); renderView(false); };
-    v.querySelectorAll('[data-within]').forEach(b => b.onclick = () => { S.table.within = +b.dataset.within; S.table.page = 1; persist(); renderView(false); });
-    v.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => { const k = b.dataset.sort, t = S.table; t.dir = t.sort === k ? (t.dir === 'asc' ? 'desc' : 'asc') : SORT_FIRST[k]; t.sort = k; t.page = 1; persist(); renderView(false); });
+    const ov = $('#overlay', v); if (ov) ov.onchange = () => { S.ui.overlay = ov.value; track('overlay_changed', { overlay: ov.value, view: S.route.view }); persist(); renderView(false); };
+    const se = $('#sw-ext', v); if (se) se.onchange = () => { S.ui.extents = se.checked; track('layer_toggled', { layer: 'perimeters', on: se.checked }); persist(); drawMap(true); };
+    const sw = $('#sw-warn', v); if (sw) sw.onchange = () => { S.ui.warnAreas = sw.checked; track('layer_toggled', { layer: 'warning_areas', on: sw.checked }); persist(); drawMap(true); };
+    const ss = $('#sw-sat', v); if (ss) ss.onchange = () => { satOn = ss.checked; track('layer_toggled', { layer: 'satellite', on: ss.checked }); drawMap(true); };
+    v.querySelectorAll('[data-show]').forEach(b => b.onclick = () => { const k = b.dataset.show; S.ui.show[k] = !S.ui.show[k]; track('map_category_toggled', { category: k, on: S.ui.show[k] }); persist(); b.setAttribute('aria-pressed', S.ui.show[k]); drawMap(true); });
+    v.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { track('state_tab_changed', { tab: b.dataset.tab, state: S.route.st || null }); S.ui.overlay = b.dataset.tab === 'forecast' ? 'danger' : 'hotspots'; persist(); renderView(false); });
+    v.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { S.ui.dangerDay = +b.dataset.day; track('danger_day_changed', { day: S.ui.dangerDay }); persist(); renderView(false); });
+    const rq = $('#rq', v); if (rq) rq.oninput = (e) => { S.table.q = rq.value; S.table.page = 1; clearTimeout(searchTimer); searchTimer = setTimeout(() => { const q = S.table.q.trim(); if (q) track('fires_searched', { query: q.slice(0, 50), view: S.route.view }); }, 1500); if (!e.isComposing && !composing) renderView(false); }; // compositionend renders
+    v.querySelectorAll('input[name="rk"]').forEach(x => x.onchange = () => { S.table.kind = x.value; track('table_filtered', { filter: 'kind', value: x.value }); S.table.page = 1; persist(); renderView(false); });
+    const rc = $('#rctl', v); if (rc) rc.onchange = () => { S.table.controlled = rc.checked; track('table_filtered', { filter: 'include_under_control', value: rc.checked }); S.table.page = 1; persist(); renderView(false); };
+    v.querySelectorAll('[data-within]').forEach(b => b.onclick = () => { S.table.within = +b.dataset.within; track('table_filtered', { filter: 'updated_within_days', value: S.table.within }); S.table.page = 1; persist(); renderView(false); });
+    v.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => { const k = b.dataset.sort, t = S.table; t.dir = t.sort === k ? (t.dir === 'asc' ? 'desc' : 'asc') : SORT_FIRST[k]; t.sort = k; t.page = 1; track('table_sorted', { sort: t.sort, dir: t.dir }); persist(); renderView(false); });
     v.querySelectorAll('[data-page]').forEach(b => b.onclick = () => { S.table.page = +b.dataset.page; renderView(false); const t = document.getElementById('top-fires'); if (t) t.scrollIntoView(); });
     const wa = $('#warnall', v); if (wa) wa.onclick = () => { S.warnAll = true; renderView(false); const r = $('#warnings .wrow:nth-child(7)'); if (r) r.focus({ preventScroll: true }); };
     if (S.route.view === 'state') fillDangerTable(S.route.st);
@@ -4650,8 +4682,9 @@ AUF.util = (function () {
     [['danger', 'Fire danger ratings & total fire bans'], ['weather', 'Weather & air quality'], ['context', 'Location, vegetation & land tenure']].forEach(([k, n]) => { if (M[k]) h += row('', n, null, null, esc(M[k].attribution || '')); });
     body.innerHTML = h;
   }
-  function openSources() { renderSources(); const d = $('#sources'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
+  function openSources() { track('sources_opened'); renderSources(); const d = $('#sources'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
   function setTheme(t) {
+    track('theme_changed', { theme: t });
     try { if (t === 'system') localStorage.removeItem('auf-theme'); else localStorage.setItem('auf-theme', t); } catch (e) { /* ignore */ }
     if (t === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', t);
     document.querySelectorAll('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.themeSet === t));
@@ -4676,6 +4709,7 @@ AUF.util = (function () {
   setInterval(() => tick(false), TICK_MS);
   S.route = parseHash(); curKey = entryKey();
   if (S.route.anchor) S.pending = { anchor: S.route.anchor, until: Date.now() + PENDING_MS }; // instant, so no smooth scroll for a render to cancel
+  trackRoute(S.route);
   renderView(true);
   if (S.route.anchor) requestAnimationFrame(reScroll);
   tick(true);
