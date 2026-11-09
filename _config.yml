@@ -1,5 +1,0 @@
-# GitHub Pages (Jekyll) settings. The site is plain static files; these folders are build inputs, not pages.
-exclude:
-  - templates
-  - tools
-  - README.md

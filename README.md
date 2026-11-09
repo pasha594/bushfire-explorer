@@ -21,24 +21,17 @@ Old `#/state/xx` links redirect to `/xx/` in the browser.
 
 | File | Purpose |
 | --- | --- |
-| `app.js`, `app.css` | The app: data adapters, map, views and router |
+| `src/app.js`, `src/app.css` | The app: data adapters, map, views and router |
 | `templates/page.html` | Page shell shared by every page |
-| `tools/build.mjs` | Generates `index.html`, the state pages and `sitemap.xml` from the template |
-| `404.html` | Static "page not found" page |
-| `robots.txt`, `sitemap.xml` | Crawler files |
-| `lib/` | Leaflet 1.9.4 and Leaflet.markercluster 1.5.3, self-hosted |
-| `assets/`, `manifest.webmanifest` | Icons, the link-preview image and the install manifest |
-| `82b76f7cece95c4cc99778a7ff98bc75.txt` | IndexNow key file (lets the site notify Bing and other engines of changed URLs) |
+| `tools/build.mjs` | Builds the site into `dist/`: copies `public/` and `src/`, and generates the home page, `/fires-near-me/`, the state pages and `sitemap.xml` from the template |
+| `public/` | Files published as they are: `404.html`, `robots.txt`, `CNAME`, icons and link-preview image (`assets/`), `manifest.webmanifest`, Leaflet 1.9.4 and Leaflet.markercluster 1.5.3 (`lib/`), and the IndexNow key file (lets the site notify Bing and other engines of changed URLs) |
+| `.github/workflows/pages.yml` | Builds on every push and pull request; deploys `dist/` to GitHub Pages on pushes to `main` |
 
-### Build step
+### Build and deploy
 
-The HTML pages are generated and committed. After editing `app.js`, `app.css`, `templates/page.html` or `tools/build.mjs`, run:
+GitHub Actions builds and deploys the site on every push to `main`. Only `dist/` is published, and it isn't committed. The build needs only Node.js, and gives `app.js` and `app.css` a new version in every page when they change, so browsers fetch the new copies.
 
-```bash
-node tools/build.mjs
-```
-
-It needs only Node.js. It rewrites the pages with a new asset version so browsers fetch the changed script and stylesheet. A GitHub Actions check fails if the committed pages are out of date. Don't edit `index.html` or the state pages by hand.
+GitHub Pages must be set to deploy from GitHub Actions: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 
 > **Not for safety-of-life decisions.** This site compiles official feeds automatically. Data may be delayed or incomplete. Always follow advice from your state fire agency and emergency broadcaster. In an emergency call **000**.
 
@@ -58,10 +51,14 @@ Most data is licensed CC BY 4.0. Some sources (SA CFS, Emergency WA, DBCA) carry
 
 ## Run locally
 
-Serve the folder over HTTP rather than opening the file directly:
+Build the site, then serve `dist/` over HTTP rather than opening the files directly:
 
 ```bash
-python3 -m http.server 8765
+node tools/build.mjs
+```
+
+```bash
+python3 -m http.server 8765 -d dist
 ```
 
 Then open http://localhost:8765 (or http://localhost:8765/nsw/ for a state page).

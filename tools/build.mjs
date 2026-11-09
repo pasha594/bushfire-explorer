@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Builds the static pages from templates/page.html: the home page, one page per state (/nsw/ … /act/) and
-// sitemap.xml. Each page gets its own title, description, canonical URL, link-preview tags, structured data and
+// Builds the site into dist/: copies public/ (static files) and src/app.js + src/app.css, then generates the home
+// page, /fires-near-me/, one page per state (/nsw/ … /act/) and sitemap.xml from templates/page.html. Each page gets its own title, description, canonical URL, link-preview tags, structured data and
 // a short static introduction inside <main>, so crawlers that don't run JavaScript still see real text. The app
 // (app.js) replaces <main> when it starts.
 //
-// Run after editing the template, app.js or app.css (the asset version in every page is a hash of both):
+// The asset version in every page is a hash of app.js and app.css, so browsers fetch them again when they change.
 //   node tools/build.mjs
-// No dependencies. Writes files in place; commit the output.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+// No dependencies. dist/ is not committed: the GitHub Actions workflow (.github/workflows/pages.yml) builds and
+// deploys it to GitHub Pages on every push to main.
+import { readFileSync, writeFileSync, mkdirSync, rmSync, cpSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,8 +16,14 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ORIGIN = 'https://bushfiremap.com';
 const SITE = 'Bushfire Explorer';
+const OUT = join(ROOT, 'dist');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
-const write = (p, s) => { mkdirSync(dirname(join(ROOT, p)), { recursive: true }); writeFileSync(join(ROOT, p), s); };
+const write = (p, s) => { mkdirSync(dirname(join(OUT, p)), { recursive: true }); writeFileSync(join(OUT, p), s); };
+
+rmSync(OUT, { recursive: true, force: true });
+cpSync(join(ROOT, 'public'), OUT, { recursive: true });
+cpSync(join(ROOT, 'src/app.js'), join(OUT, 'app.js'));
+cpSync(join(ROOT, 'src/app.css'), join(OUT, 'app.css'));
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const STATES = [
@@ -134,7 +141,7 @@ ${EMERGENCY}
 </div>`;
 }
 
-const ASSET_V = createHash('sha1').update(read('app.js')).update(read('app.css')).digest('hex').slice(0, 10);
+const ASSET_V = createHash('sha1').update(read('src/app.js')).update(read('src/app.css')).digest('hex').slice(0, 10);
 const TEMPLATE = read('templates/page.html');
 const page = (headHtml, mainHtml) => TEMPLATE.replace('{{HEAD}}', headHtml).replace('{{MAIN}}', mainHtml).replace(/\{\{V\}\}/g, ASSET_V);
 
@@ -158,4 +165,4 @@ write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>
 ${[HOME.path, NEAR.path, ...STATES.map(slug)].map(p => `  <url><loc>${ORIGIN}${p}</loc></url>`).join('\n')}
 </urlset>
 `);
-console.log(`Built index.html, fires-near-me, ${STATES.length} state pages and sitemap.xml (assets v=${ASSET_V}).`);
+console.log(`Built dist/: index.html, fires-near-me, ${STATES.length} state pages and sitemap.xml (assets v=${ASSET_V}).`);
