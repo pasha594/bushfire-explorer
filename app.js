@@ -3836,7 +3836,8 @@ AUF.util = (function () {
   function sortBtn(key, label, cls) {
     const t = S.table, on = t.sort === key, dir = on ? t.dir : null;
     const now = on ? `, sorted ${SORT_SAYS[key][dir === 'asc' ? 0 : 1]}` : '';
-    return `<span class="${cls || ''}" ${on ? `aria-sort="${dir === 'asc' ? 'ascending' : 'descending'}"` : ''}><button type="button" class="sortb${on ? ' on' : ''}" data-sort="${key}" aria-label="Sort by ${label}${now}">${label}<span class="ar" aria-hidden="true">${on ? (dir === 'asc' ? '▲' : '▼') : '↕'}</span></button></span>`;
+    // The sort state is in the button's label: aria-sort is only valid on table column headers, and this list isn't a table.
+    return `<span class="${cls || ''}"><button type="button" class="sortb${on ? ' on' : ''}" data-sort="${key}" aria-label="Sort by ${label}${now}">${label}<span class="ar" aria-hidden="true">${on ? (dir === 'asc' ? '▲' : '▼') : '↕'}</span></button></span>`;
   }
   function rankTable(st) {
     const t = S.table, rows = tableRows(st), pages = Math.max(1, Math.ceil(rows.length / PAGE));
