@@ -3583,6 +3583,7 @@ AUF.util = (function () {
   // ---------- router ----------
   const STATE_PATH = /^\/(nsw|vic|qld|sa|wa|tas|nt|act)\/?$/i;
   const pathState = (path) => { const m = STATE_PATH.exec(path || ''); return m ? m[1].toUpperCase() : null; };
+  const NEAR_PATH = /^\/fires-near-me\/?$/;
   // The route comes from the path (/nsw/) unless the #fragment names a fire, warning or state.
   function parseHash() {
     let h = (location.hash || '').replace(/^#/, '');
@@ -3594,6 +3595,7 @@ AUF.util = (function () {
     if (/^[a-z]{2,3}:.+/.test(h)) return { view: 'fire', uid: h }; // legacy #nsw:123 links
     const ps = pathState(location.pathname);
     if (ps) return { view: 'state', st: ps };
+    if (NEAR_PATH.test(location.pathname)) return { view: 'near' };
     if ((m = h.match(/^\/(top|states)$/))) return { view: 'home', anchor: m[1] === 'top' ? 'top-fires' : 'states' };
     return { view: 'home' };
   }
@@ -3612,7 +3614,7 @@ AUF.util = (function () {
     if (!href || href.charAt(0) !== '/' || href.charAt(1) === '/' || a.target === '_blank' || a.hasAttribute('download')) return null;
     let u; try { u = new URL(href, location.href); } catch (e) { return null; }
     if (u.origin !== location.origin || u.search) return null;
-    return u.pathname === '/' || pathState(u.pathname) ? u : null;
+    return u.pathname === '/' || pathState(u.pathname) || NEAR_PATH.test(u.pathname) ? u : null;
   }
   // Each history entry gets a key in history.state, so Back/Forward (not a fresh click) restores that entry's list
   // page and scroll position. Scroll restoration is manual so the browser's own restore doesn't fight the re-render.
@@ -3773,7 +3775,7 @@ AUF.util = (function () {
     // Replacing the search box mid-composition breaks IME / Android keyboard input, and replacing the overlay <select>
     // closes its open dropdown: skip the refresh and render once afterwards (compositionend / focusout below).
     // The select keeps focus after a choice, so its hold lasts at most 20 s; otherwise the page would stop updating.
-    if (fromRefresh && !isNav && active && ((composing && active.id === 'rq') || active.id === 'overlay')) {
+    if (fromRefresh && !isNav && active && ((composing && active.id === 'rq') || active.id === 'overlay' || active.id === 'nq')) {
       if (!renderDeferred) deferredAt = Date.now();
       if (active.id === 'rq' || Date.now() - deferredAt < 20000) { renderDeferred = true; return; }
     }
@@ -3787,6 +3789,7 @@ AUF.util = (function () {
     const r = S.route;
     let html = '', meta = pageMeta(r.view === 'state' ? r.st : null), missing = false;
     if (r.view === 'state') html = stateView(r.st);
+    else if (r.view === 'near') { html = nearView(); meta = { path: '/fires-near-me/', title: 'Fires near me: live bushfire map of Australia - Bushfire Explorer', description: 'Find bushfires near your location, or choose a state or town.' }; }
     else if (r.view === 'fire') { const f = S.fireByUid.get(r.uid); html = fireView(f, r.uid); trackFire(f); missing = !f; if (f) meta.title = `${prettyName(f.name)}, ${STATE_NAME[f.state]}: map and status - Bushfire Explorer`; }
     else if (r.view === 'warning') { const w = S.warnings.find(x => x.uid === r.uid); html = warningView(w, r.uid); trackWarning(w); missing = !w; if (w) meta.title = `${w.title || ALERT_TXT[w.alert]} (${w.state} ${ALERT_TXT[w.alert] || 'warning'}) - Bushfire Explorer`; }
     else html = homeView();
@@ -3803,7 +3806,7 @@ AUF.util = (function () {
   }
   document.addEventListener('compositionstart', e => { if (e.target.id === 'rq') composing = true; });
   document.addEventListener('compositionend', e => { if (e.target.id !== 'rq') return; composing = false; S.table.q = e.target.value; S.table.page = 1; renderView(false); });
-  document.addEventListener('focusout', e => { if (e.target.id === 'rq') composing = false; if (renderDeferred && (e.target.id === 'overlay' || e.target.id === 'rq')) scheduleRender(); });
+  document.addEventListener('focusout', e => { if (e.target.id === 'rq') composing = false; if (renderDeferred && (e.target.id === 'overlay' || e.target.id === 'rq' || e.target.id === 'nq')) scheduleRender(); });
 
   // ---------- shared components ----------
   function mapCard(opts) {
@@ -4027,6 +4030,90 @@ AUF.util = (function () {
       <div class="actions">${w.url ? `<a class="primary" href="${esc(w.url)}" target="_blank" rel="noopener">Official warning ↗</a>` : ''}${ad.homepage ? `<a href="${esc(ad.homepage)}" target="_blank" rel="noopener">${esc(ad.label)} ↗</a>` : ''}</div>`;
   }
 
+  // ---------- fires near me ----------
+  // The visitor's position (from the browser or a chosen town) stays in memory: it never goes into the URL, storage or
+  // analytics. Distances are to each incident's reported point, not the fire edge.
+  const NEAR_KM = 50;
+  const UCL_STATE = { 1: 'NSW', 2: 'VIC', 3: 'QLD', 4: 'SA', 5: 'WA', 6: 'TAS', 7: 'NT', 8: 'ACT' }; // first digit of an ABS UCL code
+  const ABS_UCL = 'https://geo.abs.gov.au/arcgis/rest/services/Hosted/ASGS_2021_UCL_Pop/FeatureServer/0';
+  Object.assign(S, { near: null, nearQ: '', nearHits: null, nearMsg: '', nearBusy: false });
+  const COMPASS16 = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  function bearingTo(lat1, lon1, lat2, lon2) {
+    const r = Math.PI / 180, y = Math.sin((lon2 - lon1) * r) * Math.cos(lat2 * r);
+    const x = Math.cos(lat1 * r) * Math.sin(lat2 * r) - Math.sin(lat1 * r) * Math.cos(lat2 * r) * Math.cos((lon2 - lon1) * r);
+    return COMPASS16[Math.round(((Math.atan2(y, x) / r + 360) % 360) / 22.5) % 16];
+  }
+  const kmTxt = (km) => km < 1 ? 'under 1 km' : (km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString('en-AU')) + ' km';
+  function nearRows() {
+    const n = S.near; if (!n) return [];
+    return S.fires.filter(f => cat(f) !== 'planned' && isFinite(f.lat) && isFinite(f.lon))
+      .map(f => ({ f, km: U.haversineKm(n.lat, n.lon, f.lat, f.lon), dir: bearingTo(n.lat, n.lon, f.lat, f.lon) }))
+      .sort((a, b) => a.km - b.km);
+  }
+  function setNear(pt, method) {
+    S.near = pt; S.nearHits = null; S.nearMsg = ''; S.fitPending = true;
+    track('near_location_set', { method, state: pt.state || null }); // no coordinates or place names
+    renderView(false);
+  }
+  function nearGps() {
+    if (!navigator.geolocation) { S.nearMsg = "This browser can't share its location. Search for a town instead."; renderView(false); return; }
+    S.nearBusy = true; S.nearMsg = 'Finding your location…'; renderView(false);
+    navigator.geolocation.getCurrentPosition(
+      (p) => { S.nearBusy = false; setNear({ lat: p.coords.latitude, lon: p.coords.longitude, label: 'your location', state: null }, 'device'); },
+      (e) => { S.nearBusy = false; S.nearMsg = e && e.code === 1 ? 'Location permission was declined. Search for a town instead.' : "Your location couldn't be found. Search for a town instead."; track('near_location_failed', { method: 'device', reason: e && e.code === 1 ? 'denied' : 'unavailable' }); renderView(false); },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 });
+  }
+  async function nearSearch(q) {
+    q = q.trim().replace(/[^A-Za-z0-9 '\-.()]/g, '').slice(0, 40);
+    if (q.length < 2) { S.nearMsg = 'Type at least two letters of a town name.'; renderView(false); return; }
+    S.nearBusy = true; S.nearMsg = 'Searching…'; renderView(false);
+    try {
+      const j = await U.arcgisQuery(ABS_UCL, { where: `UPPER(ucl_name_2021) LIKE '${q.toUpperCase().replace(/'/g, "''")}%' AND ucl_name_2021 NOT LIKE 'Remainder%'`,
+        outFields: 'ucl_code_2021,ucl_name_2021,persons_ur_2021', returnGeometry: 'false', returnCentroid: 'true', orderByFields: 'persons_ur_2021 DESC', resultRecordCount: '8', f: 'json' });
+      const hits = ((j && j.features) || []).filter(x => x.centroid && x.attributes).map(x => ({ lat: x.centroid.y, lon: x.centroid.x, label: String(x.attributes.ucl_name_2021).replace(/ \(.*Part\)$/, ''), state: UCL_STATE[String(x.attributes.ucl_code_2021).charAt(0)] || null }));
+      S.nearBusy = false;
+      track('near_search', { results: hits.length });
+      if (hits.length === 1) { setNear(hits[0], 'search'); return; }
+      S.nearHits = hits; S.nearMsg = hits.length ? 'Choose a place:' : 'No town found with that name. Try the start of the name, e.g. "Bend" for Bendigo.';
+    } catch (e) { S.nearBusy = false; S.nearMsg = 'Town search is unavailable right now. Use your location, or choose a state below.'; }
+    renderView(false);
+  }
+  function nearView() {
+    const n = S.near, rows = nearRows(), within = rows.filter(x => x.km <= NEAR_KM), first = rows[0];
+    const loading = AUF.adapters.some(a => !S.byAdapter[a.id] && (!S.adStatus[a.id] || S.adStatus[a.id].state === 'loading'));
+    const failed = AUF.adapters.filter(a => (S.adStatus[a.id] || {}).state === 'err' && !S.byAdapter[a.id]).map(a => a.state);
+    const asAt = new Date().toLocaleTimeString('en-AU', Object.assign({ hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }, n && n.state ? { timeZone: U.TZ[n.state] } : {}));
+    const place = n ? (n.label === 'your location' ? 'your location' : esc(n.label) + (n.state ? ', ' + n.state : '')) : '';
+    const fireTxt = (x) => `<a href="${fireHref(x.f.uid)}">${esc(prettyName(x.f.name))}</a>, ${kmTxt(x.km)} ${x.dir} (${esc(agencyStatus(x.f))}${x.f.alert ? ', ' + esc(ALERT_TXT[x.f.alert]) : ''})`;
+    let answer = '';
+    if (n) {
+      const hs = S.hotspots ? S.hotspots.features.filter(h => { const c = h.geometry && h.geometry.coordinates; return c && hotAge(h.properties) < 24 && U.haversineKm(n.lat, n.lon, c[1], c[0]) <= NEAR_KM; }).length : null;
+      answer = `<div class="nearanswer" role="status">
+        <p>${within.length ? `As at ${esc(asAt)}, state agencies list <strong>${within.length} ${within.length === 1 ? 'fire' : 'fires'}</strong> within ${NEAR_KM} km of ${place}. The nearest is ${fireTxt(within[0])}.`
+          : first ? `As at ${esc(asAt)}, no fires are listed within ${NEAR_KM} km of ${place}. The nearest listed fire is ${fireTxt(first)}.`
+          : `As at ${esc(asAt)}, no fires are listed by the state agencies.`}${loading ? ' Some state feeds are still loading.' : ''}</p>
+        ${hs != null ? `<p class="attrib">${hs.toLocaleString('en-AU')} satellite ${hs === 1 ? 'hotspot' : 'hotspots'} within ${NEAR_KM} km in the last 24 hours. A hotspot is a heat signature, not a confirmed fire.</p>` : ''}
+        ${failed.length ? `<p class="attrib" style="color:var(--em-ink)">Feeds unavailable right now: ${failed.join(', ')}. Fires in those states may be missing.</p>` : ''}
+        ${n.state === 'NT' ? '<p class="attrib">The NT doesn\'t publish a reusable incident feed. Check the <a href="https://www.pfes.nt.gov.au/incidentmap" target="_blank" rel="noopener">PFES Fire Incident Map</a>.</p>' : ''}
+        <p class="attrib">Distances are to each incident's reported location, not the fire's edge. Unofficial: follow your state fire agency and call 000 in an emergency.</p></div>`;
+    }
+    const list = within.length ? `<section class="section" id="near-list"><h2 class="big-h">Fires within ${NEAR_KM} km</h2><p class="big-sub">Nearest first, from ${place}.</p>
+      <div class="warnlist">${within.map(x => `<a class="wrow" href="${fireHref(x.f.uid)}">${x.f.alert ? awsSvg(x.f.alert, 26) : `<span class="nkm">${esc(x.dir)}</span>`}<span><span class="t">${esc(prettyName(x.f.name))}</span><span class="s"><span class="stag">${x.f.state}</span>${esc(agencyStatus(x.f))}${hasSize(x.f) ? ' · ' + esc(fmtHa(x.f.sizeHa)) + ' ha' : ''}${x.f.alert ? ' · ' + esc(ALERT_TXT[x.f.alert]) : ''}</span></span><span class="when">${kmTxt(x.km)} ${esc(x.dir)}</span></a>`).join('')}</div></section>` : '';
+    return `<a class="back" href="/">← All fires</a>
+      <header class="statehead"><h1>Fires near me</h1><hr><p class="lede">Find bushfires near your location, or search for a town. The page lists fires reported by every state fire agency within ${NEAR_KM} km, nearest first.</p></header>
+      <div class="panel nearbox">
+        <button type="button" class="nearbtn" id="near-gps"${S.nearBusy ? ' disabled' : ''}>${ICON.map} Use my location</button>
+        <form id="near-form" class="nearform" role="search"><label class="vh" for="nq">Town or locality</label><input type="search" id="nq" placeholder="Or search a town, e.g. Bendigo" value="${esc(S.nearQ)}" autocomplete="off" enterkeyhint="search"><button type="submit"${S.nearBusy ? ' disabled' : ''}>Search</button></form>
+        ${S.nearMsg ? `<p class="nearmsg" role="status">${esc(S.nearMsg)}</p>` : ''}
+        ${S.nearHits && S.nearHits.length ? `<div class="nearhits">${S.nearHits.map((h, i) => `<button type="button" data-pick="${i}">${esc(h.label)}${h.state ? ' <span>' + h.state + '</span>' : ''}</button>`).join('')}</div>` : ''}
+        <p class="attrib">Your location is used only in this browser to measure distances. It isn't saved, added to the page address or sent to our analytics. Town search uses ABS place data.</p>
+      </div>
+      ${answer}
+      ${mapCard({ short: true })}
+      ${list}
+      <section class="section"><h2 class="big-h">Fire maps by state</h2><div class="nearstates">${STATES.map(s => `<a href="${stateHref(s)}">${STATE_NAME[s]}</a>`).join('')}</div></section>`;
+  }
+
   // ---------- map drawing ----------
   function popupFor(f) {
     return `<div class="pop"><h5>${esc(prettyName(f.name))}</h5><div class="meta"><span class="stag">${f.state}</span>${f.alert ? awsSvg(f.alert, 14) + `<span class="vh">${ALERT_TXT[f.alert]}</span>` : ''}<span class="stx ${stCls(f)}">${esc(cat(f) === 'planned' ? 'Planned burn' : statusLabel(f))}</span>${hasSize(f) ? `<span>${esc(fmtHa(f.sizeHa))} ha</span>` : ''}</div>${f.updated ? `<div class="meta" style="margin-top:3px">Updated ${esc(rel(f.updated))}</div>` : ''}<a class="go" href="${fireHref(f.uid)}">View fire →</a></div>`;
@@ -4114,6 +4201,11 @@ AUF.util = (function () {
     if (S.ui.overlay === 'hotspots' && S.hotspots) L_hot.addLayer(hotLayer(st));
     drawDanger(); drawScars();
     if (!sel || nearUid !== sel.uid) { L_near.clearLayers(); nearUid = null; } // never show another fire's hotspots
+    const here = r.view === 'near' && S.near;
+    if (here) {
+      L.circle([here.lat, here.lon], { radius: NEAR_KM * 1000, interactive: false, color: css('--gold'), weight: 1.5, dashArray: '6 5', fill: false }).addTo(L_pins);
+      L.circleMarker([here.lat, here.lon], { radius: 7, weight: 3, color: '#fff', fillColor: '#2a6fdb', fillOpacity: 1, interactive: false }).addTo(L_pins);
+    }
     // Fit only once the target exists and the map sits in a visible slot: a cold fire/warning link renders before its
     // feed arrives, and fitting the parked 0x0 map then would leave the fire at continent scale.
     const mounted = mapEl.parentNode && mapEl.parentNode.classList.contains('mapslot');
@@ -4124,6 +4216,7 @@ AUF.util = (function () {
         map.invalidateSize();
         if (sel) { try { if (sel.geometry) map.fitBounds(L.geoJSON(sel.geometry).getBounds(), { maxZoom: 13, padding: [30, 30] }); else map.setView([sel.lat, sel.lon], 11); } catch (e) { map.setView([sel.lat, sel.lon], 11); } }
         else if (selW && selW.geometry) { try { if (selW.geometry.type === 'Point') map.setView([selW.geometry.coordinates[1], selW.geometry.coordinates[0]], 11); else map.fitBounds(L.geoJSON(selW.geometry).getBounds(), { maxZoom: 12 }); } catch (e) { /* ignore */ } }
+        else if (here) map.fitBounds(L.latLng(here.lat, here.lon).toBounds(NEAR_KM * 2200));
         else map.fitBounds(STATE_BOUNDS[st || 'ALL']);
       });
     }
@@ -4181,6 +4274,13 @@ AUF.util = (function () {
     v.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => { const k = b.dataset.sort, t = S.table; t.dir = t.sort === k ? (t.dir === 'asc' ? 'desc' : 'asc') : SORT_FIRST[k]; t.sort = k; t.page = 1; track('table_sorted', { sort: t.sort, dir: t.dir }); persist(); renderView(false); });
     v.querySelectorAll('[data-page]').forEach(b => b.onclick = () => { S.table.page = +b.dataset.page; renderView(false); const t = document.getElementById('top-fires'); if (t) t.scrollIntoView(); });
     const wa = $('#warnall', v); if (wa) wa.onclick = () => { S.warnAll = true; renderView(false); const r = $('#warnings .wrow:nth-child(7)'); if (r) r.focus({ preventScroll: true }); };
+    if (S.route.view === 'near') {
+      const g = $('#near-gps', v); if (g) g.onclick = nearGps;
+      const fm = $('#near-form', v), nq = $('#nq', v);
+      if (nq) nq.oninput = () => { S.nearQ = nq.value; };
+      if (fm) fm.onsubmit = (e) => { e.preventDefault(); S.nearQ = nq.value; nearSearch(nq.value); };
+      v.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { const h = S.nearHits && S.nearHits[+b.dataset.pick]; if (h) { S.nearQ = h.label; setNear(h, 'search'); } });
+    }
     if (S.route.view === 'state') fillDangerTable(S.route.st);
     if (S.route.view === 'fire') { const f = S.fireByUid.get(S.route.uid); if (f) enrich(f); }
   }

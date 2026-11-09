@@ -60,6 +60,7 @@
     <button class="burger" id="burger" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="menu"><span></span><span></span><span></span></button>
     <a href="/#/top">Top fires</a>
     <a href="/#/states">By state</a>
+    <a href="/fires-near-me/">Near me</a>
   </nav>
   <a class="logo" href="/"><span>Bushfire Explorer</span></a>
   <div class="nav-right">
@@ -67,7 +68,7 @@
   </div>
 </header>
 <div class="menu" id="menu" hidden>
-  <a href="/#/top">Top fires</a><a href="/#/states">By state</a>
+  <a href="/#/top">Top fires</a><a href="/#/states">By state</a><a href="/fires-near-me/">Fires near me</a>
   <div class="menu-states" id="menu-states"><a href="/nsw/">NSW</a><a href="/vic/">VIC</a><a href="/qld/">QLD</a><a href="/sa/">SA</a><a href="/wa/">WA</a><a href="/tas/">TAS</a><a href="/nt/">NT</a><a href="/act/">ACT</a></div>
   <button type="button" id="menu-sources">Data sources</button>
 </div>
@@ -81,7 +82,7 @@
     <p class="foot-warn" style="font-size:13px">This site uses <a href="https://posthog.com" target="_blank" rel="noopener">PostHog</a> for anonymous usage analytics (pages viewed, features used, errors and load times). It sets a first-party cookie to count return visits, and does not collect names, emails or accounts.</p>
     <div class="foot-cols">
       <div><h2 class="foot-h">Australian data sources</h2><p id="foot-sources">NSW RFS · VicEmergency · QFD · SA CFS · DFES · TFS · ACT ESA · Geoscience Australia · Bureau of Meteorology (via Esri) · NAFI · Open-Meteo</p><button type="button" class="linkbtn" id="foot-sources-btn">Feed status &amp; licences</button></div>
-      <div><h2 class="foot-h">Explore</h2><p id="foot-states"><a href="/nsw/">New South Wales</a> · <a href="/vic/">Victoria</a> · <a href="/qld/">Queensland</a> · <a href="/sa/">South Australia</a> · <a href="/wa/">Western Australia</a> · <a href="/tas/">Tasmania</a> · <a href="/nt/">Northern Territory</a> · <a href="/act/">Australian Capital Territory</a></p></div>
+      <div><h2 class="foot-h">Explore</h2><p><a href="/fires-near-me/">Fires near me</a></p><p id="foot-states"><a href="/nsw/">New South Wales</a> · <a href="/vic/">Victoria</a> · <a href="/qld/">Queensland</a> · <a href="/sa/">South Australia</a> · <a href="/wa/">Western Australia</a> · <a href="/tas/">Tasmania</a> · <a href="/nt/">Northern Territory</a> · <a href="/act/">Australian Capital Territory</a></p></div>
       <div class="theme"><h2 class="foot-h">Theme</h2><div class="themebtns" role="group" aria-label="Colour theme"><button type="button" data-theme-set="light" aria-label="Light theme">☼</button><button type="button" data-theme-set="system" aria-label="Match system">Auto</button><button type="button" data-theme-set="dark" aria-label="Dark theme">☾</button></div></div>
     </div>
   </div>

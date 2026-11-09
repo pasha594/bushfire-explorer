@@ -11,6 +11,7 @@ The app is static files on GitHub Pages, with no server or API keys. Each visito
 | URL | Page |
 | --- | --- |
 | `/` | National map |
+| `/fires-near-me/` | Fires near a location or town |
 | `/nsw/`, `/vic/`, `/qld/`, `/sa/`, `/wa/`, `/tas/`, `/nt/`, `/act/` | State and territory maps |
 | `/#/fire/{id}`, `/#/warning/{id}` | A fire or warning (in-page routes on the home page) |
 

@@ -45,6 +45,12 @@ const stateMeta = (st) => ({
     : `Live ${st.name} bushfire map: incidents and warnings from ${st.agency}, fire danger ratings and total fire bans.`,
 });
 
+const NEAR = {
+  path: '/fires-near-me/',
+  title: 'Fires near me: live bushfire map of Australia - Bushfire Explorer',
+  description: 'Find bushfires near your location, or choose a state or town.',
+};
+
 const ldScript = (obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/</g, '\\u003c')}</script>`;
 function head(meta, ld) {
   const url = ORIGIN + meta.path;
@@ -85,6 +91,7 @@ ${NOSCRIPT}
 <p>Bushfire Explorer is a free, unofficial live map of bushfires across Australia. It puts incidents and warnings from every state and territory fire agency on one map: the NSW Rural Fire Service, VicEmergency, the Queensland Fire Department, the SA Country Fire Service, Emergency WA, the Tasmania Fire Service and the ACT Emergency Services Agency.</p>
 <p>The map adds satellite hotspots from Geoscience Australia's DEA Hotspots, burnt areas in northern Australia from NAFI, Australian Fire Danger Rating System forecasts for every fire weather district, and each state's total fire ban status. Every fire has its own page with the agency's status and warning, size, mapped perimeter, nearby hotspots, weather and air quality.</p>
 <p>Your browser fetches the data directly from each agency's public feed and refreshes it every one to five minutes. The Northern Territory doesn't publish a reusable incident feed, so NT fires appear as satellite hotspots and burnt areas only.</p>
+<p><a href="/fires-near-me/">Find fires near me</a></p>
 <h2>Fire maps by state and territory</h2>
 ${stateLinks(null)}
 ${EMERGENCY}
@@ -111,6 +118,22 @@ ${EMERGENCY}
 </div>`;
 }
 
+// Crawlers don't share a location, so this fallback is what gets indexed: what the page does, and the state maps.
+function nearMain() {
+  return `<div class="shell" data-shell="near">
+<a class="back" href="/">← All fires</a>
+<header class="statehead"><h1>Fires near me</h1><hr><p class="lede">Find bushfires near your location, or search for a town. The page lists fires reported by every state fire agency within 50 km, nearest first.</p></header>
+${NOSCRIPT}
+<section class="section shell-text">
+<p>Use your location or search for a town to see the nearest listed fire, with its distance and direction, each agency's status and any warning in place. It covers incidents from the NSW Rural Fire Service, VicEmergency, the Queensland Fire Department, the SA Country Fire Service, Emergency WA, the Tasmania Fire Service and the ACT Emergency Services Agency, plus satellite hotspots from Geoscience Australia.</p>
+<p>Your location is used only in your browser to measure distances. It isn't saved or sent to this site. Distances are to each incident's reported location, not the fire's edge.</p>
+<h2>Fire maps by state and territory</h2>
+${stateLinks(null)}
+${EMERGENCY}
+</section>
+</div>`;
+}
+
 const ASSET_V = createHash('sha1').update(read('app.js')).update(read('app.css')).digest('hex').slice(0, 10);
 const TEMPLATE = read('templates/page.html');
 const page = (headHtml, mainHtml) => TEMPLATE.replace('{{HEAD}}', headHtml).replace('{{MAIN}}', mainHtml).replace(/\{\{V\}\}/g, ASSET_V);
@@ -125,10 +148,14 @@ for (const st of STATES) {
   const meta = stateMeta(st);
   write(slug(st).slice(1) + 'index.html', page(head(meta, { '@context': 'https://schema.org', '@graph': [Object.assign(webPage(meta), { breadcrumb: breadcrumbs(st) })] }), stateMain(st)));
 }
+write('fires-near-me/index.html', page(head(NEAR, { '@context': 'https://schema.org', '@graph': [Object.assign(webPage(NEAR), { breadcrumb: { '@type': 'BreadcrumbList', itemListElement: [
+  { '@type': 'ListItem', position: 1, name: 'Australia', item: ORIGIN + '/' },
+  { '@type': 'ListItem', position: 2, name: 'Fires near me', item: ORIGIN + NEAR.path },
+] } })] }), nearMain()));
 // No <lastmod>: Google uses it only when it is consistently accurate, and these pages' text doesn't change with fire activity yet.
 write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${[HOME.path, ...STATES.map(slug)].map(p => `  <url><loc>${ORIGIN}${p}</loc></url>`).join('\n')}
+${[HOME.path, NEAR.path, ...STATES.map(slug)].map(p => `  <url><loc>${ORIGIN}${p}</loc></url>`).join('\n')}
 </urlset>
 `);
-console.log(`Built index.html, ${STATES.length} state pages and sitemap.xml (assets v=${ASSET_V}).`);
+console.log(`Built index.html, fires-near-me, ${STATES.length} state pages and sitemap.xml (assets v=${ASSET_V}).`);

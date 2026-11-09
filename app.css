@@ -447,3 +447,22 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
 .shell-links + .shell-note { margin-top: 28px; }
 .attrib { font-size: 12.5px; line-height: 1.45; color: var(--ink-3); margin: 10px 0 0; }
 .attrib a { color: inherit; }
+
+/* ---------- fires near me ---------- */
+.nearbox { display: grid; gap: 12px; margin-bottom: 20px; padding: 16px; }
+.nearbtn { justify-self: start; display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; background: var(--gold-fill); color: #241c1f; padding: 11px 20px; font: 700 15px/1 var(--sans); cursor: pointer; }
+.nearbtn svg { width: 18px; height: 18px; }
+.nearbtn:disabled, .nearform button:disabled { opacity: .6; cursor: progress; }
+.nearform { display: flex; gap: 8px; flex-wrap: wrap; }
+.nearform input { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line-2); background: var(--card); border-radius: 10px; padding: 10px 12px; }
+.nearform button { border: 1px solid var(--line-2); background: var(--card-2); border-radius: 10px; padding: 10px 16px; font-weight: 700; cursor: pointer; }
+.nearmsg { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+.nearhits { display: flex; flex-wrap: wrap; gap: 8px; }
+.nearhits button { border: 1px solid var(--line-2); background: var(--card); border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 14.5px; }
+.nearhits button span { color: var(--ink-3); font-size: 12px; font-weight: 700; margin-left: 4px; }
+.nearanswer { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--gold-fill); border-radius: 14px; padding: 14px 16px; margin-bottom: 20px; }
+.nearanswer p { margin: 0; }
+.nearanswer a { color: var(--gold-ink); font-weight: 700; }
+.nkm { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--card-3); font: 700 9.5px/1 var(--sans); color: var(--ink-2); flex: none; }
+.nearstates { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.nearstates a { border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 11px; text-decoration: none; font-size: 14px; }
