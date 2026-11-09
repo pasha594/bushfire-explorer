@@ -453,7 +453,8 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
 
 </style>
 <script>
-  // PostHog product analytics (anonymous), project 723308 in the "Bushfire Map" org. POSTHOG_KEY is the project's public ingestion key (phc_…), which is safe to publish.
+  // Free tier only: no autocapture, page-leave, rage-click or web-vitals events. Only $pageview, the app's custom events,
+  // $exception (own free quota) and $$heatmap (free) are sent. PostHog product analytics (anonymous), project 723308 in the "Bushfire Map" org. POSTHOG_KEY is the project's public ingestion key (phc_…), which is safe to publish.
   // Only runs on the live site so local testing doesn't pollute the data.
   (function () {
     var POSTHOG_KEY = 'phc_rvkR3vjpdScbwkJCGj8ByvjbCK5fPoRkx5QMuU58eHao';
@@ -464,15 +465,16 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
       defaults: '2026-08-30',
       person_profiles: 'identified_only', // anonymous visitors only; no person profiles
       capture_pageview: false,            // the app sends one $pageview per in-page route (#/state/…, #/fire/…)
-      capture_pageleave: true,
-      autocapture: { dom_event_allowlist: ['click'] }, // clicks only: custom events already cover changes (no per-keystroke / per-toggle 'change' duplicates)
+      capture_pageleave: false,           // time on page comes from $prev_pageview_duration on the next $pageview
+      autocapture: false,                 // custom events cover the interactions that matter; keeps volume inside the free tier
+      rageclick: false,
       disable_session_recording: true,
       respect_dnt: true,
       disable_capture_url_hashes: false,  // routes live in the hash; the 2026-06-25+ defaults would strip them from $current_url, hrefs, heatmaps, entry URL
-      capture_exceptions: true,           // unhandled errors + promise rejections (console.error stays off)
-      capture_performance: { web_vitals: true, network_timing: false },
-      capture_heatmaps: true,
-      disable_surveys: true,              // no surveys: skip the 48 KB surveys.js download             // free to ingest; includes rage/dead clicks on any element
+      capture_exceptions: true,           // unhandled errors + promise rejections (separate 100k/month free error quota)
+      capture_performance: false,         // no $web_vitals events (they count as normal events)
+      capture_heatmaps: true,             // heatmap data is free to ingest
+      disable_surveys: true,              // no surveys: skip the 48 KB surveys.js download
       before_send: function (e) {         // Web analytics paths: '/fire/nsw:123' instead of '/' for every event
         try { var u = e && e.properties && e.properties.$current_url, i = u ? u.indexOf('#/') : -1; if (i > 0) e.properties.$pathname = decodeURIComponent(u.slice(i + 1).split('?')[0]); } catch (x) { /* keep the event */ }
         return e;
@@ -503,7 +505,7 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
 <footer class="foot">
   <div class="foot-inner">
     <p class="foot-warn"><strong>Bushfire Explorer is for informational purposes only.</strong> It is not a replacement for official sources. Always follow advice and warnings from your state fire agency and emergency broadcaster. In an emergency call <strong>000</strong>.</p>
-    <p class="foot-warn" style="font-size:13px">This site uses <a href="https://posthog.com" target="_blank" rel="noopener">PostHog</a> for anonymous usage analytics (pages viewed, features used, errors and load times). It sets a first-party cookie to count return visits, and does not collect names, emails or accounts.</p>
+    <p class="foot-warn" style="font-size:13px">This site uses <a href="https://posthog.com" target="_blank" rel="noopener">PostHog</a> for anonymous usage analytics (pages viewed, features used, errors and feed load times). It sets a first-party cookie to count return visits, and does not collect names, emails or accounts.</p>
     <div class="foot-cols">
       <div><h4>Australian data sources</h4><p id="foot-sources">NSW RFS · VicEmergency · QFD · SA CFS · DFES · TFS · ACT ESA · Geoscience Australia · Bureau of Meteorology (via Esri) · NAFI · Open-Meteo</p><button type="button" class="linkbtn" id="foot-sources-btn">Feed status &amp; licences</button></div>
       <div><h4>Explore</h4><p id="foot-states"></p></div>
