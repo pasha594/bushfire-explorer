@@ -3501,7 +3501,8 @@ AUF.util = (function () {
     const t0 = performance.now();
     const get = async (hours) => { const fc = await M.hotspots.national({ hours }); if (fc && fc.features && (fc.features.length || !S.hotspots)) S.hotspots = fc; S.hotspotErr = null; };
     try {
-      if (!S.hotspots) { await get(24); scheduleRender(); }
+      // First load: the 24 h set paints first; the 72 h set (several times larger) waits until the browser is idle.
+      if (!S.hotspots) { await get(24); scheduleRender(); await new Promise(r => (window.requestIdleCallback ? requestIdleCallback(r, { timeout: 5000 }) : setTimeout(r, 1500))); }
       await get(72);
     } catch (e) { S.hotspotErr = String(e.message || e); console.warn('[hotspots]', e); }
     S.hotspotsAt = Date.now(); scheduleRender();

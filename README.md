@@ -4,7 +4,40 @@ A live map of bushfires across Australia, modelled on [fires.cornea.is](https://
 
 **Live site:** https://bushfiremap.com
 
-The whole app is one static `index.html`. It has no server, build step or API keys. Each visitor's browser fetches the agencies' public feeds directly and refreshes them every 1–5 minutes.
+The app is static files on GitHub Pages, with no server or API keys. Each visitor's browser fetches the agencies' public feeds directly and refreshes them every 1–5 minutes.
+
+## Pages and URLs
+
+| URL | Page |
+| --- | --- |
+| `/` | National map |
+| `/nsw/`, `/vic/`, `/qld/`, `/sa/`, `/wa/`, `/tas/`, `/nt/`, `/act/` | State and territory maps |
+| `/#/fire/{id}`, `/#/warning/{id}` | A fire or warning (in-page routes on the home page) |
+
+Old `#/state/xx` links redirect to `/xx/` in the browser.
+
+## Files
+
+| File | Purpose |
+| --- | --- |
+| `app.js`, `app.css` | The app: data adapters, map, views and router |
+| `templates/page.html` | Page shell shared by every page |
+| `tools/build.mjs` | Generates `index.html`, the state pages and `sitemap.xml` from the template |
+| `404.html` | Static "page not found" page |
+| `robots.txt`, `sitemap.xml` | Crawler files |
+| `lib/` | Leaflet 1.9.4 and Leaflet.markercluster 1.5.3, self-hosted |
+| `assets/` | Favicons and the link-preview image |
+| `82b76f7cece95c4cc99778a7ff98bc75.txt` | IndexNow key file (lets the site notify Bing and other engines of changed URLs) |
+
+### Build step
+
+The HTML pages are generated and committed. After editing `app.js`, `app.css`, `templates/page.html` or `tools/build.mjs`, run:
+
+```bash
+node tools/build.mjs
+```
+
+It needs only Node.js. It rewrites the pages with a new asset version so browsers fetch the changed script and stylesheet. A GitHub Actions check fails if the committed pages are out of date. Don't edit `index.html` or the state pages by hand.
 
 > **Not for safety-of-life decisions.** This site compiles official feeds automatically. Data may be delayed or incomplete. Always follow advice from your state fire agency and emergency broadcaster. In an emergency call **000**.
 
@@ -30,4 +63,4 @@ Serve the folder over HTTP rather than opening the file directly:
 python3 -m http.server 8765
 ```
 
-Then open http://localhost:8765.
+Then open http://localhost:8765 (or http://localhost:8765/nsw/ for a state page).
