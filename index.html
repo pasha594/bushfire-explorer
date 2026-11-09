@@ -465,9 +465,18 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
       person_profiles: 'identified_only', // anonymous visitors only; no person profiles
       capture_pageview: false,            // the app sends one $pageview per in-page route (#/state/…, #/fire/…)
       capture_pageleave: true,
-      autocapture: true,
+      autocapture: { dom_event_allowlist: ['click'] }, // clicks only: custom events already cover changes (no per-keystroke / per-toggle 'change' duplicates)
       disable_session_recording: true,
       respect_dnt: true,
+      disable_capture_url_hashes: false,  // routes live in the hash; the 2026-06-25+ defaults would strip them from $current_url, hrefs, heatmaps, entry URL
+      capture_exceptions: true,           // unhandled errors + promise rejections (console.error stays off)
+      capture_performance: { web_vitals: true, network_timing: false },
+      capture_heatmaps: true,
+      disable_surveys: true,              // no surveys: skip the 48 KB surveys.js download             // free to ingest; includes rage/dead clicks on any element
+      before_send: function (e) {         // Web analytics paths: '/fire/nsw:123' instead of '/' for every event
+        try { var u = e && e.properties && e.properties.$current_url, i = u ? u.indexOf('#/') : -1; if (i > 0) e.properties.$pathname = decodeURIComponent(u.slice(i + 1).split('?')[0]); } catch (x) { /* keep the event */ }
+        return e;
+      },
     });
   })();
 </script>
@@ -494,7 +503,7 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
 <footer class="foot">
   <div class="foot-inner">
     <p class="foot-warn"><strong>Bushfire Explorer is for informational purposes only.</strong> It is not a replacement for official sources. Always follow advice and warnings from your state fire agency and emergency broadcaster. In an emergency call <strong>000</strong>.</p>
-    <p class="foot-warn" style="font-size:13px">This site uses <a href="https://posthog.com" target="_blank" rel="noopener">PostHog</a> for anonymous usage analytics (pages viewed and features used). It does not collect names, emails or accounts.</p>
+    <p class="foot-warn" style="font-size:13px">This site uses <a href="https://posthog.com" target="_blank" rel="noopener">PostHog</a> for anonymous usage analytics (pages viewed, features used, errors and load times). It sets a first-party cookie to count return visits, and does not collect names, emails or accounts.</p>
     <div class="foot-cols">
       <div><h4>Australian data sources</h4><p id="foot-sources">NSW RFS · VicEmergency · QFD · SA CFS · DFES · TFS · ACT ESA · Geoscience Australia · Bureau of Meteorology (via Esri) · NAFI · Open-Meteo</p><button type="button" class="linkbtn" id="foot-sources-btn">Feed status &amp; licences</button></div>
       <div><h4>Explore</h4><p id="foot-states"></p></div>
@@ -510,8 +519,8 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
     <p>Seasonal outlook: <a href="https://www.afac.com.au/seasonal-outlook" target="_blank" rel="noopener">AFAC Seasonal Bushfire Outlook</a>. Fire danger ratings use the Australian Fire Danger Rating System. Warning levels follow the Australian Warning System.</p>
   </div>
 </dialog>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js" crossorigin="anonymous"></script>
 <script>
 // ===== util.js =====
 // Shared helpers for all adapters/modules. Plain browser JS (no modules); also loaded by the Node test harness.
@@ -3815,6 +3824,7 @@ AUF.util = (function () {
     ui: Object.assign({ extents: true, warnAreas: true, show: { active: true, controlled: false, planned: false } }, prefs.ui || {}, { overlay: 'hotspots', dangerDay: 1 }),
     table: Object.assign({ kind: 'fires', controlled: false, within: 0, q: '', page: 1, sort: 'size', dir: 'desc' }, prefs.table || {}, { q: '', page: 1 }),
     warnAll: false,
+    boot: {}, firstFiresAt: 0,
   };
 
   if (![0, 1, 3, 7].includes(S.table.within)) S.table.within = 0; // saved from the older 7/5/3/1 picker
@@ -3964,6 +3974,7 @@ AUF.util = (function () {
   // ---------- data loading (unchanged behaviour: per-adapter refresh, keep-last-good) ----------
   async function runAdapter(ad) {
     const st = S.adStatus[ad.id] = Object.assign(S.adStatus[ad.id] || {}, { state: 'loading' });
+    const t0 = performance.now();
     try {
       const out = await ad.load();
       const prev = S.byAdapter[ad.id], n = (out.fires || []).length;
@@ -3980,32 +3991,40 @@ AUF.util = (function () {
       console.warn('[adapter ' + ad.id + ']', e);
     }
     st.nextAt = Date.now() + (st.state === 'err' ? Math.max(90000, Math.min(ad.refreshMs || 120000, 300000)) : (ad.refreshMs || 120000));
+    if (st.ms0 == null) st.ms0 = Math.round(performance.now() - t0);
     rebuild();
+    health();
   }
   async function loadExtents() {
     if (!M.perimeters) return;
+    const t0 = performance.now();
     try {
       const fc = await M.perimeters.national();
       if (fc && fc.features && fc.features.length === 0 && S.extents && S.extents.features.length > 5 && !S.extSuspect) { S.extSuspect = true; S.extentsAt = Date.now() - EXTENT_MS + 60000; return; }
       S.extSuspect = false; S.extents = fc; S.extentErr = null;
     } catch (e) { S.extentErr = String(e.message || e); console.warn('[extents]', e); }
     S.extentsAt = Date.now(); rebuild();
+    if (!S.boot.perimeters) { S.boot.perimeters = { ms: Math.round(performance.now() - t0), err: S.extentErr, n: S.extents ? S.extents.features.length : null }; health(); }
   }
   // Every map shows the same 72 h of satellite hotspots as the fire pages. On first load the last 24 h is fetched
   // first so the map paints quickly, then the full 72 h replaces it.
   async function loadHotspots() {
     if (!M.hotspots) return;
+    const t0 = performance.now();
     const get = async (hours) => { const fc = await M.hotspots.national({ hours }); if (fc && fc.features && (fc.features.length || !S.hotspots)) S.hotspots = fc; S.hotspotErr = null; };
     try {
       if (!S.hotspots) { await get(24); scheduleRender(); }
       await get(72);
     } catch (e) { S.hotspotErr = String(e.message || e); console.warn('[hotspots]', e); }
     S.hotspotsAt = Date.now(); scheduleRender();
+    if (!S.boot.hotspots) { S.boot.hotspots = { ms: Math.round(performance.now() - t0), err: S.hotspotErr, n: S.hotspots ? S.hotspots.features.length : null }; health(); }
   }
   async function loadTfb() {
     if (!M.danger || !M.danger.tfbSummary) return;
-    try { S.tfb = await M.danger.tfbSummary(); } catch (e) { console.warn('[tfb]', e); }
+    const t0 = performance.now(); let err = null;
+    try { S.tfb = await M.danger.tfbSummary(); } catch (e) { err = String(e.message || e); console.warn('[tfb]', e); }
     S.tfbAt = Date.now(); scheduleRender();
+    if (!S.boot.tfb) { S.boot.tfb = { ms: Math.round(performance.now() - t0), err, n: S.tfb ? 1 : 0 }; health(); }
   }
   function tick(force) {
     const now = Date.now();
@@ -4027,6 +4046,7 @@ AUF.util = (function () {
     const inACT = (f) => /australian capital territory/i.test(f.lga || '') || (f.lat > -35.93 && f.lat < -35.12 && f.lon > 148.76 && f.lon < 149.4);
     S.fires = act.length ? all.filter(f => !(f.state === 'NSW' && inACT(f) && act.some(a => U.haversineKm(a.lat, a.lon, f.lat, f.lon) < 3))) : all;
     S.fireByUid = new Map(S.fires.map(f => [f.uid, f]));
+    if (!S.firstFiresAt && S.fires.length) S.firstFiresAt = performance.now(); // painted on the next frame
     S.warnings = warns;
     scheduleRender();
   }
@@ -4113,7 +4133,7 @@ AUF.util = (function () {
     const saved = curKey !== key ? navMem.get(key) : null;
     curKey = key; S.route = r; closeMenu();
     S.pending = r.anchor ? { anchor: r.anchor, until: Date.now() + PENDING_MS } : saved ? { y: saved.y, until: Date.now() + PENDING_MS } : null;
-    if (!same) { S.fitPending = true; S.table.page = saved ? saved.page : 1; S.warnAll = saved ? saved.warnAll : false; trackRoute(r); renderView(true); }
+    if (!same) { S.fitPending = true; S.table.page = saved ? saved.page : 1; S.warnAll = saved ? saved.warnAll : false; trackedFire = trackedMissing = null; popupsThisRoute = 0; mapTouched = false; routeVia = takeVia(); renderView(true); trackRoute(r); }
     else if (saved && !r.anchor) window.scrollTo(0, saved.y);
     if (r.anchor) requestAnimationFrame(() => { const el = document.getElementById(r.anchor); if (el) el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); });
   }
@@ -4149,17 +4169,73 @@ AUF.util = (function () {
   const isPlaceholder = (el) => !!el.querySelector('.loading') || /^[…—]?$/.test(el.textContent.trim());
   // isNav: a route change. fromRefresh: a background data refresh (scheduleRender); everything else is a user action.
   // Analytics: no-op unless PostHog loaded (live site only). The snippet's stub queues calls made before the library arrives.
-  const track = (event, props) => { try { if (window.posthog && window.posthog.capture) window.posthog.capture(event, props || {}); } catch (e) { /* never break the page */ } };
-  let trackedFire = null, searchTimer = 0;
+  const uidState = (uid) => (AUF.adapters.find(a => a.id === String(uid || '').split(':')[0]) || {}).state || null;
+  const routeState = (r) => r.st || (r.uid ? uidState(r.uid) : null);
+  // Every event carries the page it happened on (view + state); an event's own props win.
+  const track = (event, props) => { try { if (window.posthog && window.posthog.capture) window.posthog.capture(event, Object.assign({ view: S.route.view, state: routeState(S.route) }, props)); } catch (e) { /* never break the page */ } };
+  let trackedFire = null, trackedMissing = null, searchTimer = 0, pendingVia = null, routeVia = 'landing', routeN = 0, popupsThisRoute = 0, mapTouched = false;
+  // How the visitor reached the route: the in-app link they clicked (set by the boot click listener), Back/Forward
+  // ('history'), or the first route of the page load ('landing'; $referrer says from where).
+  const VIA = [['.rrow', 'table'], ['.wrow', 'warnings_list'], ['.scard', 'state_card'], ['.leaflet-popup', 'map_popup'], ['.tfbline', 'fire_ban_line'], ['.warncard', 'linked_warning'], ['.note', 'warning_page'], ['.facts', 'fire_page'], ['.back', 'back_link'], ['.viewall', 'view_all'], ['#menu', 'menu'], ['.masthead', 'header'], ['.foot', 'footer']];
+  const viaFor = (a) => { const v = (VIA.find(([sel]) => a.closest(sel)) || [0, 'other_link'])[1]; return v === 'table' && S.table.q.trim() ? 'table_search' : v; };
+  const takeVia = () => { const p = pendingVia; pendingVia = null; return routeN++ === 0 ? 'landing' : p && Date.now() - p.at < 2000 ? p.via : 'history'; };
   function trackRoute(r) {
-    trackedFire = null;
-    track('$pageview', { $current_url: location.href, view: r.view, state: r.st || null, fire_uid: r.view === 'fire' ? r.uid : null });
+    track('$pageview', { $current_url: location.href, view: r.view, state: routeState(r), fire_uid: r.view === 'fire' ? r.uid : null, warning_uid: r.view === 'warning' ? r.uid : null, via: routeVia });
   }
   function trackFire(f) {
     if (!f || trackedFire === f.uid) return;
     trackedFire = f.uid;
-    track('fire_viewed', { fire_uid: f.uid, state: f.state, source: f.source, kind: f.kind, status: f.status, alert: f.alert || 'none', size_ha: f.sizeHa != null ? Math.round(f.sizeHa) : null, has_perimeter: !!f.geometry });
+    track('fire_viewed', { fire_uid: f.uid, state: f.state, source: f.source, kind: f.kind, status: f.status, alert: f.alert || 'none', size_ha: f.sizeHa != null ? Math.round(f.sizeHa) : null, has_perimeter: !!f.geometry, has_official_link: !!f.url, stale: !!isStale(f), via: routeVia });
   }
+  function trackWarning(w) {
+    if (!w || trackedFire === w.uid) return;
+    trackedFire = w.uid;
+    track('warning_viewed', { warning_uid: w.uid, state: w.state, alert: w.alert || 'none', linked_fire_uid: w.fireUid || null, has_area: !!(w.geometry && w.geometry.type !== 'Point'), has_official_link: !!w.url, via: routeVia });
+  }
+  function trackMissing(uid, what, reason) {
+    if (trackedMissing === uid) return;
+    trackedMissing = uid;
+    track('route_unresolved', { what, reason, fire_uid: what === 'fire' ? uid : null, warning_uid: what === 'warning' ? uid : null, via: routeVia });
+  }
+  // ---- data health: one summary per page load, once every feed has answered once (or the tab hides / 60 s pass) ----
+  const errKind = (m) => { m = String(m || ''); const h = /HTTP (\d)\d\d/.exec(m); return h ? 'http_' + h[1] + 'xx' : /abort|timed? ?out/i.test(m) ? 'timeout' : /failed to fetch|networkerror|load failed|network request failed/i.test(m) ? 'network' : /json|unexpected (token|end)|not a cap|not an array|pars|xml|syntax/i.test(m) ? 'parse' : 'other'; };
+  const partLabel = (e) => String(e).split(':')[0].trim().slice(0, 32) + ':' + errKind(e); // 'CAP parse:parse', never the raw message (URLs, headlines)
+  const partLabels = (errs) => [...new Set((errs || []).map(partLabel))].slice(0, 4).join(',') || null;
+  let healthSent = false;
+  function health(trigger) {
+    if (healthSent) return;
+    const pend = AUF.adapters.filter(a => !S.adStatus[a.id] || S.adStatus[a.id].ms0 == null).length + ['hotspots', 'perimeters', 'tfb'].filter(k => !S.boot[k]).length;
+    if (!trigger && pend) return;
+    healthSent = true;
+    const p = { trigger: trigger || 'complete', pending_feeds: pend, first_fires_ms: S.firstFiresAt ? Math.round(S.firstFiresAt) : null, fires: S.fires.length, warnings: S.warnings.length, online: navigator.onLine, net: (navigator.connection && navigator.connection.effectiveType) || null };
+    const by = { error: [], empty: [], partial: [] }; let slow = null;
+    AUF.adapters.forEach(a => {
+      const st = S.adStatus[a.id] || {}, k = a.id;
+      const status = st.ms0 == null ? 'pending' : st.state === 'err' ? 'error' : !st.count ? 'empty' : st.notes && st.notes.length ? 'partial' : 'ok';
+      p[k + '_status'] = status; p[k + '_ms'] = st.ms0 != null ? st.ms0 : null; p[k + '_count'] = st.state === 'err' ? null : st.count != null ? st.count : null;
+      if (status === 'error') p[k + '_error'] = errKind(st.error);
+      if (status === 'partial') p[k + '_partial'] = partLabels(st.notes);
+      if (by[status]) by[status].push(a.state);
+      if (st.ms0 != null && (!slow || st.ms0 > slow.ms)) slow = { id: k, ms: st.ms0 };
+    });
+    ['hotspots', 'perimeters', 'tfb'].forEach(k => { const b = S.boot[k]; p[k + '_status'] = !b ? 'pending' : b.err ? 'error' : b.n === 0 ? 'empty' : 'ok'; p[k + '_ms'] = b ? b.ms : null; if (b && b.err) p[k + '_error'] = errKind(b.err); });
+    p.failed_states = by.error.sort().join(',') || 'none'; p.empty_states = by.empty.sort().join(',') || 'none'; p.partial_states = by.partial.sort().join(',') || 'none';
+    p.slowest_feed = slow && slow.id;
+    track('feeds_loaded', p);
+  }
+  // Fire-page enrichment and state danger table: one event per fire (or panel) per page load, and only when something failed.
+  const detailsSent = new Set();
+  function reportDetails(f, ps) {
+    if (detailsSent.has(f.uid)) return; detailsSent.add(f.uid);
+    const t0 = performance.now(), names = Object.keys(ps).filter(k => ps[k]);
+    Promise.allSettled(names.map(k => ps[k])).then(rs => {
+      const failed = [], parts = [];
+      rs.forEach((r, i) => { if (r.status === 'rejected') failed.push(names[i] + ':' + errKind(r.reason && r.reason.message || r.reason)); else ((r.value && r.value.errors) || []).forEach(e => parts.push(names[i] + '.' + partLabel(e))); });
+      if (failed.length || parts.length) track('details_degraded', { view: 'fire', fire_uid: f.uid, state: f.state, panels_failed: failed.join(',') || 'none', parts_failed: [...new Set(parts)].slice(0, 6).join(',') || 'none', ms: Math.round(performance.now() - t0) });
+    });
+  }
+  function degradedOnce(panel, e) { const k = panel + ':' + (S.route.st || ''); if (detailsSent.has(k)) return; detailsSent.add(k); track('details_degraded', { panels_failed: panel + ':' + errKind(e && e.message || e), parts_failed: 'none' }); }
+  const cleanQuery = (q) => q.toLowerCase().replace(/\S+@\S+/g, '[email]').replace(/\d/g, '#').replace(/\s+/g, ' ').slice(0, 40);
   function renderView(isNav, fromRefresh) {
     const view = $('#view'), active = document.activeElement;
     // Replacing the search box mid-composition breaks IME / Android keyboard input, and replacing the overlay <select>
@@ -4180,7 +4256,7 @@ AUF.util = (function () {
     let html = '', title = 'Bushfire Explorer';
     if (r.view === 'state') { html = stateView(r.st); title = STATE_NAME[r.st] + ' Fires Map | Bushfire Explorer'; }
     else if (r.view === 'fire') { const f = S.fireByUid.get(r.uid); html = fireView(f, r.uid); trackFire(f); title = f ? prettyName(f.name) + ' | ' + STATE_NAME[f.state] + ' | Bushfire Explorer' : title; }
-    else if (r.view === 'warning') { html = warningView(S.warnings.find(w => w.uid === r.uid), r.uid); }
+    else if (r.view === 'warning') { const w = S.warnings.find(x => x.uid === r.uid); html = warningView(w, r.uid); trackWarning(w); }
     else { html = homeView(); title = 'Bushfire Explorer | Live Bushfire Map & Incident Data for Australia'; }
     document.title = title;
     view.innerHTML = html;
@@ -4332,6 +4408,7 @@ AUF.util = (function () {
     if (ad && !have && (!as || (as.state === 'loading' && !as.error))) body = `<div class="loading">Loading ${what}</div>`;
     else if (ad && !have && as.error) body = `<h1 class="big-h" style="font-size:30px">${esc(ad.label)} feed unavailable</h1><p class="big-sub">This ${what} can't be shown while the agency's feed is unreachable. The page will update when the feed is back. Meanwhile, check <a href="${esc(ad.homepage)}" target="_blank" rel="noopener">${esc(ad.label)} ↗</a>.</p>${stateLink}`;
     else body = what === 'fire' ? `<h1 class="big-h" style="font-size:30px">Fire not found</h1><p class="big-sub">This incident is no longer in the agency's feed. It may have been closed or merged.</p>${stateLink}` : `<h1 class="big-h" style="font-size:30px">Warning no longer current</h1>${stateLink}`;
+    if (!(ad && !have && (!as || (as.state === 'loading' && !as.error)))) trackMissing(uid, what, ad && !have ? 'feed_down' : ad ? 'not_found' : 'unknown_source');
     return `<a class="back" href="#/">← All fires</a><div class="empty" style="padding:60px 0">${body}</div>`;
   }
   function fireView(f, uid) {
@@ -4440,6 +4517,15 @@ AUF.util = (function () {
   // A data refresh shouldn't close a popup someone is reading: defer redraws until it closes.
   let mapDirty = false, nearUid = null; // nearUid: the fire whose 10 km hotspots are in L_near
   map.on('popupclose', () => { if (mapDirty) { mapDirty = false; setTimeout(() => drawMap(true), 0); } });
+  map.on('popupopen', (e) => {
+    if (++popupsThisRoute > 20) return; // cap per route view
+    const src = e.popup && e.popup._source, o = (src && src.options) || {};
+    const kind = o.cat === 'warning' ? 'warning' : o.cat ? 'fire' : o.renderer === hotR ? 'hotspot' : o.renderer === nearR ? 'hotspot_near' : o.pane === 'danger' ? 'danger_district' : o.pane === 'extents' ? 'perimeter' : 'other';
+    track('map_popup_opened', { kind, fire_uid: kind === 'fire' ? o.uid : null, warning_uid: kind === 'warning' ? o.uid : null, overlay: S.ui.overlay });
+  });
+  const mapInput = (input) => () => { if (mapTouched) return; mapTouched = true; track('map_interacted', { input, overlay: S.ui.overlay }); };
+  mapEl.addEventListener('wheel', mapInput('wheel'), { passive: true });
+  map.on('dragstart', mapInput('drag')); // Leaflet fires dragstart only for user drags
   function drawMap(force) {
     if (!force && map._popup && map.hasLayer(map._popup)) { mapDirty = true; return; }
     mapDirty = false;
@@ -4454,7 +4540,7 @@ AUF.util = (function () {
     fires.forEach(f => {
       const isSel = sel && f.uid === sel.uid, p = pinSvg(f, isSel);
       const zo = (ALERT_RANK[f.alert] || 0) * 1000 + (STATUS_RANK[f.status] || 0) * 100 + (isSel ? 9000 : 0) + Math.round(Math.log10(1 + (f.sizeHa || 0)) * 10);
-      const mk = L.marker([f.lat, f.lon], { icon: L.divIcon({ className: 'pin' + (isSel ? ' sel' : ''), html: p.html, iconSize: [p.w, p.h], iconAnchor: [p.w / 2, p.h - 1], popupAnchor: [0, -p.h + 4] }), zIndexOffset: zo, title: prettyName(f.name), keyboard: false, alertRank: ALERT_RANK[f.alert] || 0, cat: cat(f) })
+      const mk = L.marker([f.lat, f.lon], { icon: L.divIcon({ className: 'pin' + (isSel ? ' sel' : ''), html: p.html, iconSize: [p.w, p.h], iconAnchor: [p.w / 2, p.h - 1], popupAnchor: [0, -p.h + 4] }), zIndexOffset: zo, title: prettyName(f.name), keyboard: false, alertRank: ALERT_RANK[f.alert] || 0, cat: cat(f), uid: f.uid })
         .bindPopup(() => popupFor(f));
       if (isSel) mk.addTo(L_pins); else clustered.push(mk);
       if (S.ui.warnAreas && f.warningGeometry && f.alert) L.geoJSON(f.warningGeometry, { pane: 'warnings', interactive: false, style: { color: AWS_COL[f.alert], weight: 2, dashArray: '5 4', fillColor: AWS_COL[f.alert], fillOpacity: 0.08 } }).addTo(L_warn);
@@ -4467,7 +4553,7 @@ AUF.util = (function () {
       if (S.ui.warnAreas && g.type !== 'Point') L.geoJSON(g, { pane: 'warnings', interactive: false, style: { color: AWS_COL[w.alert], weight: 2, dashArray: '5 4', fillColor: AWS_COL[w.alert], fillOpacity: 0.08 } }).addTo(L_warn);
       if (linkedFire(w) && !selW) return;
       const pt = U.firstPoint(g); if (!pt) return;
-      const wm = L.marker([pt[1], pt[0]], { icon: L.divIcon({ className: 'pin', html: awsSvg(w.alert, 22), iconSize: [22, 20], iconAnchor: [11, 13] }), zIndexOffset: 800, title: w.title || '', alertRank: ALERT_RANK[w.alert] || 0, cat: 'warning' })
+      const wm = L.marker([pt[1], pt[0]], { icon: L.divIcon({ className: 'pin', html: awsSvg(w.alert, 22), iconSize: [22, 20], iconAnchor: [11, 13] }), zIndexOffset: 800, title: w.title || '', alertRank: ALERT_RANK[w.alert] || 0, cat: 'warning', uid: w.uid })
         .bindPopup(`<div class="pop"><h5>${esc(w.title || ALERT_TXT[w.alert])}</h5><div class="meta"><span class="stag">${w.state}</span>${esc(ALERT_TXT[w.alert])}</div><a class="go" href="${warnHref(w)}">View warning →</a></div>`);
       if (selW) wm.addTo(L_pins); else clustered.push(wm);
     });
@@ -4527,7 +4613,7 @@ AUF.util = (function () {
         style: (ft) => { const r = ft.properties.rating, none = !r || ft.properties.noData; return { color: 'rgba(40,40,40,.45)', weight: 0.8, dashArray: none ? '3 3' : null, fillColor: none ? '#999' : (M.danger.ratingColor(r) || '#999'), fillOpacity: none ? 0.04 : r === 'No Rating' ? 0.05 : (baseKey === 'light' ? 0.5 : 0.42) }; },
         onEachFeature: (ft, lyr) => { const p = ft.properties; lyr.bindPopup(`<div class="pop"><h5>${esc(p.name)}</h5><dl><dt>Fire danger</dt><dd>${esc(p.noData || !p.rating ? 'Not yet issued' : p.rating)}</dd><dt>FBI</dt><dd>${esc(p.fbi ?? '—')}</dd><dt>Date</dt><dd>${esc(p.date || '')}</dd></dl></div>`); },
       }).addTo(L_danger);
-    } catch (e) { console.warn('[danger layer]', e); }
+    } catch (e) { console.warn('[danger layer]', e); degradedOnce('danger_layer', e); }
   }
   function drawScars() {
     if (scarLayer) { map.removeLayer(scarLayer); scarLayer = null; }
@@ -4549,7 +4635,7 @@ AUF.util = (function () {
     v.querySelectorAll('[data-show]').forEach(b => b.onclick = () => { const k = b.dataset.show; S.ui.show[k] = !S.ui.show[k]; track('map_category_toggled', { category: k, on: S.ui.show[k] }); persist(); b.setAttribute('aria-pressed', S.ui.show[k]); drawMap(true); });
     v.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { track('state_tab_changed', { tab: b.dataset.tab, state: S.route.st || null }); S.ui.overlay = b.dataset.tab === 'forecast' ? 'danger' : 'hotspots'; persist(); renderView(false); });
     v.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { S.ui.dangerDay = +b.dataset.day; track('danger_day_changed', { day: S.ui.dangerDay }); persist(); renderView(false); });
-    const rq = $('#rq', v); if (rq) rq.oninput = (e) => { S.table.q = rq.value; S.table.page = 1; clearTimeout(searchTimer); searchTimer = setTimeout(() => { const q = S.table.q.trim(); if (q) track('fires_searched', { query: q.slice(0, 50), view: S.route.view }); }, 1500); if (!e.isComposing && !composing) renderView(false); }; // compositionend renders
+    const rq = $('#rq', v); if (rq) rq.oninput = (e) => { S.table.q = rq.value; S.table.page = 1; clearTimeout(searchTimer); const sv = S.route.view, sst = sv === 'state' ? S.route.st : null; searchTimer = setTimeout(() => { const q = S.table.q.trim(); if (q) track('fires_searched', { query: cleanQuery(q), query_length: q.length, result_count: tableRows(sst).length, kind: S.table.kind, include_controlled: S.table.controlled, within_days: S.table.within, view: sv, state: sst }); }, 1500); if (!e.isComposing && !composing) renderView(false); }; // compositionend renders
     v.querySelectorAll('input[name="rk"]').forEach(x => x.onchange = () => { S.table.kind = x.value; track('table_filtered', { filter: 'kind', value: x.value }); S.table.page = 1; persist(); renderView(false); });
     const rc = $('#rctl', v); if (rc) rc.onchange = () => { S.table.controlled = rc.checked; track('table_filtered', { filter: 'include_under_control', value: rc.checked }); S.table.page = 1; persist(); renderView(false); };
     v.querySelectorAll('[data-within]').forEach(b => b.onclick = () => { S.table.within = +b.dataset.within; track('table_filtered', { filter: 'updated_within_days', value: S.table.within }); S.table.page = 1; persist(); renderView(false); });
@@ -4582,6 +4668,8 @@ AUF.util = (function () {
     if (M.context) cached('ctx:' + key, () => M.context.forFire(arg)).then(c => { if (!still()) return; fillPanel('p-veg', vegHtml(c)); ctxFill(c, f); }).catch(e => { fail('p-veg', 'Vegetation')(e); const t = $('#d-town'); if (t) t.textContent = '—'; const pk = $('#d-park'); if (pk) pk.textContent = '—'; });
     if (M.hotspots) cached('hot:' + key, () => M.hotspots.nearFire({ lat: f.lat, lon: f.lon, km: 10, hours: 72 })).then(h => { if (!still()) return; fillPanel('p-hot', hotHtml(h)); drawNear(h, f.uid); }).catch(e => { if (still()) { L_near.clearLayers(); nearUid = null; } fail('p-hot', 'Hotspot data')(e); });
     else fillPanel('p-hot', '<div class="err">Not available.</div>');
+    // Same keys as above, called synchronously, so these return the in-flight promises (no second request).
+    reportDetails(f, { weather: M.weather && cached('wx:' + key, () => M.weather.forFire(arg)), danger: M.danger && cached('fdr:' + key, () => M.danger.forFire(arg)), context: M.context && cached('ctx:' + key, () => M.context.forFire(arg)), hotspots: M.hotspots && cached('hot:' + key, () => M.hotspots.nearFire({ lat: f.lat, lon: f.lon, km: 10, hours: 72 })) });
   }
   function nowHtml(w) {
     if (!w || !w.now) return '<div class="err">Weather unavailable right now.</div>';
@@ -4663,7 +4751,7 @@ AUF.util = (function () {
       el.innerHTML = `<table class="fdrtable"><thead><tr><th>District</th>${[0, 1, 2, 3].map(i => `<th>${dates[i] ? esc(dayLabel(dates[i], st)) : ['Today', 'Tomorrow', 'Day 3', 'Day 4'][i]}</th>`).join('')}<th>TFB today</th></tr></thead><tbody>${Array.from(rows.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([name, ps]) => `<tr><td>${esc(name)}</td>${[0, 1, 2, 3].map(i => cell(ps[i])).join('')}${tfbCell(name)}</tr>`).join('')}</tbody></table>`;
       el.style.padding = '8px 12px';
       reScroll();
-    } catch (e) { console.warn('[fdr table]', e); el.innerHTML = '<div class="err">Fire danger ratings unavailable right now.</div>'; }
+    } catch (e) { console.warn('[fdr table]', e); degradedOnce('danger_table', e); el.innerHTML = '<div class="err">Fire danger ratings unavailable right now.</div>'; }
   }
 
   // ---------- chrome (menu, footer, sources dialog) ----------
@@ -4682,7 +4770,7 @@ AUF.util = (function () {
     [['danger', 'Fire danger ratings & total fire bans'], ['weather', 'Weather & air quality'], ['context', 'Location, vegetation & land tenure']].forEach(([k, n]) => { if (M[k]) h += row('', n, null, null, esc(M[k].attribution || '')); });
     body.innerHTML = h;
   }
-  function openSources() { track('sources_opened'); renderSources(); const d = $('#sources'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
+  function openSources(e) { track('sources_opened', { from: (e && e.currentTarget && e.currentTarget.id) || 'menu', feeds_failing: AUF.adapters.filter(a => (S.adStatus[a.id] || {}).state === 'err').length }); renderSources(); const d = $('#sources'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
   function setTheme(t) {
     track('theme_changed', { theme: t });
     try { if (t === 'system') localStorage.removeItem('auf-theme'); else localStorage.setItem('auf-theme', t); } catch (e) { /* ignore */ }
@@ -4702,15 +4790,27 @@ AUF.util = (function () {
   // A link to the hash already showing fires no hashchange: route it anyway, so it closes the menu and re-scrolls.
   document.addEventListener('click', e => {
     const a = e.target.closest && e.target.closest('a[href^="#/"]');
+    if (a) pendingVia = { via: viaFor(a), at: Date.now() };
     if (a && !e.defaultPrevented && e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) && a.getAttribute('href') === location.hash) { e.preventDefault(); onRoute(); }
   });
+  // Outbound links (all open in a new tab, so the page stays and the event is sent normally). auxclick = middle-click.
+  const outKind = (a) => a.closest('.actions') ? (a.classList.contains('primary') ? (S.route.view === 'warning' ? 'official_warning' : 'incident_page') : 'agency_home') : a.closest('.agency') ? 'agency_state_page' : a.closest('#fdrtable, .tfbnote') ? 'fire_ban' : a.closest('#sources') ? 'sources_dialog' : a.closest('.leaflet-control-attribution') ? 'map_attribution' : a.closest('.foot') ? 'footer' : 'other';
+  ['click', 'auxclick'].forEach(type => document.addEventListener(type, e => {
+    const a = e.target.closest && e.target.closest('a[href^="http"]');
+    if (!a || a.hostname === location.hostname || (type === 'auxclick' && e.button !== 1)) return;
+    const r = S.route, f = r.view === 'fire' ? S.fireByUid.get(r.uid) : null, w = r.view === 'warning' ? S.warnings.find(x => x.uid === r.uid) : null;
+    track('outbound_clicked', { link: outKind(a), domain: a.hostname.replace(/^www\./, ''), fire_uid: f ? f.uid : null, warning_uid: w ? w.uid : null, alert: (f || w || {}).alert || 'none' });
+  }, true));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') health('hidden'); });
+  setTimeout(() => health('timeout'), 60000);
   window.addEventListener('resize', () => map.invalidateSize());
   try { history.scrollRestoration = 'manual'; } catch (e) { /* ignore */ }
   setInterval(() => tick(false), TICK_MS);
   S.route = parseHash(); curKey = entryKey();
   if (S.route.anchor) S.pending = { anchor: S.route.anchor, until: Date.now() + PENDING_MS }; // instant, so no smooth scroll for a render to cancel
-  trackRoute(S.route);
+  routeVia = takeVia();
   renderView(true);
+  trackRoute(S.route);
   if (S.route.anchor) requestAnimationFrame(reScroll);
   tick(true);
 })();
