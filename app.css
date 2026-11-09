@@ -445,3 +445,5 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
 .shell-links a:hover { border-color: var(--ink-3); }
 .shell-note { font-size: 14px; color: var(--ink-3); margin: 22px 0 0; }
 .shell-links + .shell-note { margin-top: 28px; }
+.attrib { font-size: 12.5px; line-height: 1.45; color: var(--ink-3); margin: 10px 0 0; }
+.attrib a { color: inherit; }

@@ -319,7 +319,7 @@ AUF.util = (function () {
     state: 'ACT',
     label: 'ACT Emergency Services Agency',
     homepage: 'https://esa.act.gov.au/?fullmap=true',
-    attribution: '© ACT Emergency Services Agency, CC BY 4.0',
+    attribution: 'Incidents © ACT Emergency Services Agency (no licence statement published for the incident feeds)',
     refreshMs: 120000,
     async load() {
       const errors = [];
@@ -1122,7 +1122,8 @@ AUF.util = (function () {
   AUF.adapters.push({
     id: 'sa', state: 'SA', label: 'SA Country Fire Service & MFS',
     homepage: 'https://www.cfs.sa.gov.au/warnings-restrictions/warnings/incidents-warnings/',
-    attribution: '© Government of South Australia (SA CFS, SA MFS, SAFECOM). CFS site CC BY 4.0; data.sa.gov.au lists the incident feed as CC BY-NC-ND 4.0',
+    // The CFS copyright page prescribes this form: "The Government of South Australia, <title>, sourced on <date>, <URL>".
+    get attribution() { return 'The Government of South Australia, SA CFS current incidents and warnings, sourced on ' + new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Adelaide', day: 'numeric', month: 'long', year: 'numeric' }) + ', ' + FEED + '. CFS website: CC BY 4.0; data.sa.gov.au lists the incident feed as CC BY-NC-ND 4.0'; },
     refreshMs: 120000,
     async load() {
       const errors = [];
@@ -1362,7 +1363,10 @@ AUF.util = (function () {
   AUF.adapters.push({
     id: 'tas', state: 'TAS', label: 'Tasmania Fire Service',
     homepage: 'https://alert.tas.gov.au/',
-    attribution: 'Incidents © Tasmania Fire Service (TFS); warnings © State of Tasmania (theLIST, replicated from TasALERT), CC BY 3.0 AU',
+    attribution: 'Incidents © Tasmania Fire Service (TFS), CC BY 4.0; warnings © State of Tasmania (theLIST, replicated from TasALERT), CC BY 3.0 AU',
+    // Required by TFS's data feed conditions (https://www.fire.tas.gov.au/Show?pageId=xmlFeedsHome), shown with the data.
+    disclaimer: 'Disclaimer: This information is extracted from the Tasmania Fire Service\'s Fire Incident Response Management (FIRM) system. This information is not necessarily \'real time\' information, but is provided as a general indication of current activity. During outages of the TFS Website members of the public should refer to their ABC Local Radio for bushfire information and updates.',
+    disclaimerLink: { text: 'ABC Local Radio', url: 'https://www.abc.net.au/radio/hobart/live/' },
     refreshMs: 120000,
     async load() {
       const errors = [];
@@ -1740,6 +1744,7 @@ AUF.util = (function () {
     id: 'vic', state: 'VIC', label: 'VicEmergency (CFA · DEECA · FRV)',
     homepage: 'https://emergency.vic.gov.au/respond/',
     attribution: '© State of Victoria, Australia (Emergency Management Victoria, VicEmergency), CC BY 3.0 AU; FFMVic/DEECA',
+    licenceUrl: 'https://www.emv.vic.gov.au/responsibilities/victorias-warning-system/emergency-data',
     refreshMs: 120000,
     load,
   });
@@ -2106,7 +2111,7 @@ AUF.util = (function () {
   let cache = null;
   AUF.adapters.push({
     id: 'wa', state: 'WA', label: 'WA Department of Fire and Emergency Services', homepage: 'https://emergency.wa.gov.au/',
-    attribution: '© State of Western Australia acting through the Department of Fire and Emergency Services (Emergency WA), CC BY-ND 4.0; fire shapes © DBCA via Landgate SLIP; prescribed burns © DBCA Prescribed Burn System, CC BY-NC 4.0',
+    attribution: '© State of Western Australia acting through the Department of Fire and Emergency Services. For current information go to www.emergency.wa.gov.au. (CC BY-ND 4.0.) Fire shapes © DBCA via Landgate SLIP; prescribed burns © DBCA Prescribed Burn System, CC BY-NC 4.0',
     refreshMs: MIN_MS,
     load() {   // never poll Emergency WA more than once per 5 min (concurrent callers share one request; failures are not cached)
       if (!cache || Date.now() - cache.t >= MIN_MS) { const c = cache = { t: Date.now(), p: loadFresh() }; c.p.catch(() => { if (cache === c) cache = null; }); }
@@ -2294,7 +2299,7 @@ AUF.util = (function () {
     VIC: 'https://emergency.vic.gov.au/public/osom-fdrtfb.json', VIC_CFA: 'https://www.cfa.vic.gov.au/api/cfa/tfbfdr/viewfdr', SA: 'https://data.eso.sa.gov.au/prod/cfs/criimson/fireDangerRating.xml',
     WA: 'https://api.emergency.wa.gov.au/v1/total-fire-bans' };
   const AGENCY = { NSW: 'NSW RFS', ACT: 'ACT ESA', VIC: 'CFA', SA: 'SA CFS', WA: 'DFES', QLD: 'QFD', TAS: 'TFS', NT: 'NT Fire and Rescue Service / Bushfires NT' };
-  const PAGE = { NSW: 'https://www.rfs.nsw.gov.au/fire-information/fdr-and-tobans', ACT: 'https://esa.act.gov.au/fire-danger-ratings-and-total-fire-bans',
+  const PAGE = { NSW: 'https://www.rfs.nsw.gov.au/fire-information/fdr-and-tobans', ACT: 'https://esa.act.gov.au/be-emergency-ready/total-fire-bans',
     VIC: 'https://www.cfa.vic.gov.au/warnings-restrictions/fire-bans-ratings-and-restrictions/total-fire-bans-fire-danger-ratings',
     SA: 'https://www.cfs.sa.gov.au/warnings-restrictions/restrictions/total-fire-bans-ratings/', WA: 'https://www.dfes.wa.gov.au/hazard-information/bushfire/total-fire-ban',
     QLD: 'https://www.fire.qld.gov.au/safety-education/using-fire-outdoors/fire-bans-and-restrictions',
@@ -2585,7 +2590,7 @@ AUF.util = (function () {
   }
 
   AUF.modules.danger = {
-    attribution: 'Fire danger ratings © Bureau of Meteorology, via Esri Australia "Fire Districts – 4 Day Forecast" (reference only). VIC ratings and Total Fire Bans: CFA via VicEmergency (CFA API fallback). Total Fire Bans: NSW RFS, ACT ESA, SA CFS, DFES, QFD (council bans).',
+    attribution: 'Fire danger ratings © Bureau of Meteorology, via Esri Australia "Fire Districts – 4 Day Forecast" (reference only). VIC ratings and Total Fire Bans: CFA via VicEmergency (CFA API fallback). Total Fire Bans: NSW RFS, ACT ESA, SA CFS, DFES, QFD (council bans). ACT fire danger ratings and Total Fire Bans © ACT Emergency Services Agency, CC BY 4.0.',
     sources: [{ name: 'Esri Australia – Fire Districts 4 Day Forecast (BoM AFDRS)', url: 'https://www.arcgis.com/home/item.html?id=b8505ee34f414a5a842b0f0a32ea3e94' },
       { name: 'NSW RFS – Fire Danger Ratings and Total Fire Bans', url: FEED.NSW }, { name: 'ACT ESA – Fire Danger Rating Meter', url: FEED.ACT },
       { name: 'VicEmergency – Fire danger ratings and Total Fire Bans (CFA)', url: FEED.VIC }, { name: 'CFA – Total Fire Bans and Ratings (fallback API)', url: PAGE.VIC }, { name: 'SA CFS – Fire Danger and Total Fire Ban', url: FEED.SA },
@@ -2615,7 +2620,7 @@ AUF.util = (function () {
   const AU_BOUNDS = [[-44.5, 112], [-9, 154.5]];
   const ATTR_DEA = '© Commonwealth of Australia (Geoscience Australia), DEA Hotspots, CC BY 4.0';
   const ATTR_FIRMS = 'NASA LANCE FIRMS (ESDIS)';
-  const ATTR_NAFI = 'Fire scars: NAFI, Charles Darwin University (non-commercial use)';
+  const ATTR_NAFI = 'Fire scars: NAFI, Charles Darwin University';
 
   const qs = (p) => Object.keys(p).map(k => k + '=' + encodeURIComponent(p[k])).join('&');
   const clamp = (v, lo, hi, d) => { v = +v; return isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
@@ -3344,6 +3349,9 @@ AUF.util = (function () {
   }
   const cat = (f) => f.kind === 'planned' ? 'planned' : f.status === 'under_control' ? 'controlled' : 'active';
   const statusLabel = (f) => f.statusLabel || STATUS_TXT[f.status] || 'Unknown';
+  // The agency's own status words (NSW "Not Yet Controlled", WA "Contained" …), tidied from ALL CAPS; the shared
+  // three-step scale stays in the bar beside it.
+  const agencyStatus = (f) => { const t = String(f.statusLabel || '').trim(); if (!t) return STATUS_TXT[f.status] || 'Not reported'; return t === t.toUpperCase() ? t.charAt(0) + t.slice(1).toLowerCase() : t; };
   const stCls = (f) => f.kind === 'planned' ? 'st-planned' : 'st-' + f.status;
   const isStale = (f) => f.updated && (Date.now() - Date.parse(f.updated)) > 3 * 864e5;
   // State pages live at real paths (/nsw/ … /act/) so search engines can index them; fire and warning views stay in
@@ -3412,13 +3420,15 @@ AUF.util = (function () {
   ['danger', 'extents', 'warnings', 'hotspots', 'nearhot', 'labels'].forEach((p, i) => { map.createPane(p); map.getPane(p).style.zIndex = 380 + i * 10; });
   map.getPane('labels').style.pointerEvents = 'none';
   map.createPane('relief'); map.getPane('relief').style.zIndex = 210; map.getPane('relief').style.pointerEvents = 'none'; map.getPane('relief').style.mixBlendMode = 'multiply';
-  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/', ESRI_ATTR = 'Powered by Esri · Esri, USGS, NOAA, Geoscience Australia';
+  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/', ESRI_ATTR = 'Powered by Esri · Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS user community';
+  // Each service's own copyrightText (…/MapServer?f=json).
+  const HILL_ATTR = 'Hillshade: Esri, Vantor, Airbus DS, USGS, NGA, NASA, CGIAR, N Robinson, NCEAS, NLS, OS, NMA, Geodatastyrelsen, Rijkswaterstaat, GSA, Geoland, FEMA, Intermap, and the GIS user community';
   const tl = (path, o) => L.tileLayer(ESRI + path + '/MapServer/tile/{z}/{y}/{x}', Object.assign({ maxZoom: 18, maxNativeZoom: 16 }, o));
   const BASE = {
     // Light: grey canvas (land/water) with the hillshade multiplied in, so relief shows at every zoom. (World_Terrain_Base has no close-zoom tiles for Australia.)
-    light: L.layerGroup([tl('Canvas/World_Light_Gray_Base', { attribution: ESRI_ATTR }), tl('Elevation/World_Hillshade', { pane: 'relief', opacity: 0.55 }), tl('Canvas/World_Light_Gray_Reference', { pane: 'labels' })]),
-    dark: L.layerGroup([tl('Canvas/World_Dark_Gray_Base', { attribution: ESRI_ATTR }), tl('Elevation/World_Hillshade_Dark', { opacity: 0.55 }), tl('Canvas/World_Dark_Gray_Reference', { pane: 'labels' })]),
-    sat: L.layerGroup([tl('World_Imagery', { maxNativeZoom: 18, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics' }), tl('Canvas/World_Dark_Gray_Reference', { pane: 'labels' })]),
+    light: L.layerGroup([tl('Canvas/World_Light_Gray_Base', { attribution: ESRI_ATTR }), tl('Elevation/World_Hillshade', { pane: 'relief', opacity: 0.55, attribution: HILL_ATTR }), tl('Canvas/World_Light_Gray_Reference', { pane: 'labels' })]),
+    dark: L.layerGroup([tl('Canvas/World_Dark_Gray_Base', { attribution: ESRI_ATTR }), tl('Elevation/World_Hillshade_Dark', { opacity: 0.55, attribution: HILL_ATTR }), tl('Canvas/World_Dark_Gray_Reference', { pane: 'labels' })]),
+    sat: L.layerGroup([tl('World_Imagery', { maxNativeZoom: 18, attribution: 'Imagery: Esri, Vantor, Earthstar Geographics, and the GIS User Community' }), tl('Canvas/World_Dark_Gray_Reference', { pane: 'labels', attribution: ESRI_ATTR })]),
   };
   const isDark = () => { const t = document.documentElement.getAttribute('data-theme'); return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
   let baseKey = null;
@@ -3819,7 +3829,7 @@ AUF.util = (function () {
     if (cat(f) === 'planned') return `<span class="cbar" title="Agency status: ${esc(statusLabel(f))}"><span class="clabel st-planned">Planned burn</span><span class="craw">${esc(statusLabel(f))}</span></span>`;
     const steps = { out_of_control: 1, being_controlled: 2, under_control: 3 }[f.status] || 0;
     const fill = { out_of_control: 'var(--ooc)', being_controlled: 'var(--bc)', under_control: 'var(--uc)' }[f.status] || 'var(--unk)';
-    return `<span class="cbar" title="Agency status: ${esc(statusLabel(f))}"><span class="csteps" style="--sfill:${fill}">${[1, 2, 3].map(i => `<i class="${i <= steps ? 'on' : ''}"></i>`).join('')}</span><span class="clabel ${stCls(f)}">${esc(STATUS_TXT[f.status] || 'Not reported')}</span></span>`;
+    return `<span class="cbar" title="${esc(STATUS_TXT[f.status] || 'Status not given')} (shared scale)"><span class="csteps" style="--sfill:${fill}">${[1, 2, 3].map(i => `<i class="${i <= steps ? 'on' : ''}"></i>`).join('')}</span><span class="clabel ${stCls(f)}">${esc(agencyStatus(f))}</span></span>`;
   }
   const SORT_FIRST = { name: 'asc', state: 'asc', cont: 'desc', size: 'desc' }; // first click on a column
   const SORT_SAYS = { name: ['A to Z', 'Z to A'], state: ['A to Z', 'Z to A'], cont: ['least severe first', 'most severe first'], size: ['smallest first', 'largest first'] };
@@ -3901,7 +3911,13 @@ AUF.util = (function () {
 
   function stateView(st) {
     const ad = AUF.adapters.find(a => a.state === st), as = ad && S.adStatus[ad.id];
-    const latest = as && as.at ? new Date(as.at) : null;
+    // NT has no incident feed: its page is dated by the hotspot feed instead.
+    const latest = st === 'NT' ? (S.hotspotsAt ? new Date(S.hotspotsAt) : null) : as && as.at ? new Date(as.at) : null;
+    const stamp = (d) => d.toLocaleString('en-AU', { timeZone: U.TZ[st], day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+    const updatedLine = latest ? (st === 'NT' ? 'Hotspots updated ' : 'Updated ') + esc(stamp(latest)) : (st === 'NT' ? (S.hotspotErr ? '' : 'Loading…') : as && as.state === 'err' ? '' : 'Loading…');
+    // Licence conditions (EMV, TFS): the last time an update was received from the feed, shown next to the data, plus
+    // each agency's attribution and any disclaimer it requires.
+    const credit = ad ? `<p class="attrib">${as && as.at ? `Last received from ${esc(ad.label)}: ${esc(stamp(new Date(as.at)))}. ` : ''}${esc(ad.attribution)}${ad.licenceUrl ? ` · <a href="${esc(ad.licenceUrl)}" target="_blank" rel="noopener">Licence notice</a>` : ''}</p>${ad.disclaimer ? `<p class="attrib">${ad.disclaimerLink ? esc(ad.disclaimer).replace(esc(ad.disclaimerLink.text), `<a href="${esc(ad.disclaimerLink.url)}" target="_blank" rel="noopener">${esc(ad.disclaimerLink.text)}</a>`) : esc(ad.disclaimer)}</p>` : ''}` : '';
     const lede = st === 'NT'
       ? `Track fires in the Northern Territory with satellite hotspots from Geoscience Australia and NAFI burnt-area mapping. NT Fire and Rescue doesn't publish a reusable incident feed, so official NT incidents and warnings are linked below.`
       : `Track active ${STATE_NAME[st]} bushfires on a live ${st} fire map. See fires in ${STATE_NAME[st]} today – location, size and status – with official warnings from ${ad ? esc(ad.label) : 'the state fire agency'}, fire danger ratings by district and satellite hotspots.`;
@@ -3909,13 +3925,13 @@ AUF.util = (function () {
       ? `<div class="agency"><span>Official NT incidents: <a href="https://www.pfes.nt.gov.au/incidentmap" target="_blank" rel="noopener">PFES Fire Incident Map ↗</a> · <a href="https://www.securent.nt.gov.au/" target="_blank" rel="noopener">SecureNT ↗</a> · Burnt areas: <a href="https://firenorth.org.au/nafi3/" target="_blank" rel="noopener">NAFI ↗</a></span></div>`
       : ad ? `<div class="agency"><span><span class="dotok ${as ? (as.state === 'err' ? 'err' : as.state === 'loading' && !S.byAdapter[ad.id] ? 'loading' : '') : 'loading'}"></span>${as && as.state === 'err' ? `<strong>${esc(ad.label)} feed unavailable</strong> — ${esc(as.error)}` : `Data from <strong>${esc(ad.label)}</strong>${as && as.count != null ? ` · ${as.count} incidents` : ''}${as && as.at ? ` · fetched ${esc(rel(new Date(as.at).toISOString()))}` : ''}`}</span><a href="${esc(ad.homepage)}" target="_blank" rel="noopener">Official ${esc(st)} incidents ↗</a></div>` : '';
     return `<a class="back" href="/#/states">← All states</a>
-      <header class="statehead"><h1>${STATE_NAME[st]} fire map</h1><hr><p class="lede">${lede}</p><p class="updated-line">${latest ? 'Updated ' + esc(latest.toLocaleString('en-AU', { timeZone: U.TZ[st], day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })) : 'Loading…'}</p></header>
+      <header class="statehead"><h1>${STATE_NAME[st]} fire map</h1><hr><p class="lede">${lede}</p><p class="updated-line">${updatedLine}</p></header>
       ${mapCard({ st, tabs: true })}
       ${tfbLine()}
       ${warnList(st)}
       ${st === 'NT' ? '' : `<section class="section" id="top-fires"><h2 class="big-h">Top active fires</h2><p class="big-sub">The largest fires burning in ${STATE_NAME[st]}, ranked by known size.</p>${rankTable(st)}</section>`}
       <section class="section" id="danger"><h2 class="big-h">Fire danger by district</h2><p class="big-sub">Australian Fire Danger Rating System forecasts for ${STATE_NAME[st]}'s fire weather districts.</p><div class="panel"><div class="tablewrap" id="fdrtable"><div class="loading">Loading fire danger ratings</div></div></div></section>
-      <section class="section">${agencyCard}</section>
+      <section class="section">${agencyCard}${credit}</section>
       <a class="viewall" href="/#/states">View all states →</a>`;
   }
 
@@ -3995,7 +4011,7 @@ AUF.util = (function () {
   function overview(f) {
     const nm = prettyName(f.name), started = fmtDay(f.started, f.state), size = hasSize(f) ? fmtHa(f.sizeHa) + ' ha' : null;
     if (f.kind === 'planned') return `${nm} is a planned burn${f.agency ? ' managed by ' + f.agency : ''}${size ? ', covering about ' + size : ''}. Status: ${statusLabel(f).toLowerCase()}.`;
-    const st = { out_of_control: 'out of control', being_controlled: 'being controlled', under_control: 'under control' }[f.status] || 'listed as ' + statusLabel(f).toLowerCase();
+    const st = f.statusLabel ? `listed by ${f.source || 'the agency'} as "${agencyStatus(f)}"` : ({ out_of_control: 'out of control', being_controlled: 'being controlled', under_control: 'under control' }[f.status] || 'listed with no status');
     return `${nm} ${started ? 'was reported on ' + started + ' and ' : ''}is ${st}${size ? ' at ' + size : ''}${f.alert ? `, with ${f.alert === 'advice' ? 'an' : 'a'} ${ALERT_TXT[f.alert]} in place` : ''}.`;
   }
   function warningView(w, uid) {
@@ -4199,11 +4215,13 @@ AUF.util = (function () {
     const windWord = n.windKmh == null ? 'Wind' : n.windKmh < 6 ? 'Calm' : n.windKmh < 20 ? 'Light wind' : n.windKmh < 40 ? 'Moderate wind' : n.windKmh < 62 ? 'Strong wind' : 'Gale-force wind';
     return `<div class="rightnow"><div class="temp">${wxIcon(n.code)}<span>${n.tempC != null ? Math.round(n.tempC) : '—'}<sup>°C</sup></span></div><div class="cond">${esc(n.text || '')}</div><div class="updated-line">Humidity ${n.rh != null ? Math.round(n.rh) + '%' : '—'}${w.past && w.past.precip24hMm != null ? ' · ' + w.past.precip24hMm.toFixed(1) + ' mm rain in 24 h' : ''}</div></div>
       <div class="tiles2"><div><span class="circ">${arrow}</span><div class="tl"><b>${windWord}</b><span>${n.windKmh != null ? Math.round(n.windKmh) + ' km/h' : '—'} · ${esc(n.windDir || '')}${n.gustKmh != null ? ' · gusts ' + Math.round(n.gustKmh) : ''}</span></div></div>
-        <div>${a && a.pm25 != null ? `<span class="circ" style="background:${esc(a.color || '#ccc')};color:${/very|extreme/i.test(a.category) ? '#fff' : '#111'}">${Math.round(a.pm25)}</span><div class="tl"><b>${esc(a.category)}</b><span>Air quality · PM2.5 µg/m³</span></div>` : '<div class="tl"><b>—</b><span>Air quality</span></div>'}</div></div>`;
+        <div>${a && a.pm25 != null ? `<span class="circ" style="background:${esc(a.color || '#ccc')};color:${/very|extreme/i.test(a.category) ? '#fff' : '#111'}">${Math.round(a.pm25)}</span><div class="tl"><b>${esc(a.category)}</b><span>Air quality · PM2.5 µg/m³</span></div>` : '<div class="tl"><b>—</b><span>Air quality</span></div>'}</div></div>
+      <p class="attrib"><a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a> (CC BY 4.0)${a && a.pm25 != null ? ' · Air quality: Copernicus Atmosphere Monitoring Service via Open-Meteo' : ''}</p>`;
   }
   function wxHtml(w, f) {
     if (!w || !w.daily || !w.daily.length) return '<div class="err">Forecast unavailable right now.</div>';
-    return `<div class="days4">${w.daily.slice(0, 4).map(d => `<div><div class="dn">${esc(dayLabel(d.date, w.tz || f.state))}</div>${wxIcon(d.code)}<div class="hi">${d.tMaxC != null ? Math.round(d.tMaxC) + '°' : '—'}</div><div class="lo">${d.tMinC != null ? Math.round(d.tMinC) + '°' : ''}</div><div class="xs">${d.windMaxKmh != null ? Math.round(d.windMaxKmh) + ' km/h ' + esc(d.windDirDominant || '') : ''}${d.rhMin != null ? '<br>RH ' + Math.round(d.rhMin) + '%' : ''}${d.precipMm ? '<br>' + d.precipMm.toFixed(1) + ' mm' : ''}</div></div>`).join('')}</div>`;
+    return `<div class="days4">${w.daily.slice(0, 4).map(d => `<div><div class="dn">${esc(dayLabel(d.date, w.tz || f.state))}</div>${wxIcon(d.code)}<div class="hi">${d.tMaxC != null ? Math.round(d.tMaxC) + '°' : '—'}</div><div class="lo">${d.tMinC != null ? Math.round(d.tMinC) + '°' : ''}</div><div class="xs">${d.windMaxKmh != null ? Math.round(d.windMaxKmh) + ' km/h ' + esc(d.windDirDominant || '') : ''}${d.rhMin != null ? '<br>RH ' + Math.round(d.rhMin) + '%' : ''}${d.precipMm ? '<br>' + d.precipMm.toFixed(1) + ' mm' : ''}</div></div>`).join('')}</div>
+      <p class="attrib"><a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a> (CC BY 4.0)</p>`;
   }
   function fdrHtml(d, f) {
     if (!d) return '<div class="err">Fire danger ratings unavailable right now.</div>';
