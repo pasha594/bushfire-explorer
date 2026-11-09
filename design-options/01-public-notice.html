@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>01 Public Notice · Bushfire Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;700;800&display=swap">
+<link rel="stylesheet" href="shared/leaflet.css">
+<style>
+/* Public Notice — the page borrows the language Australians already know from emergency information:
+   Australian Warning System triangles, Fire Danger Rating colours, plain high-contrast type. Square corners, 2px rules. */
+:root {
+  --paper: #ffffff;
+  --ink: #0f1720;
+  --ink-2: #46525d;
+  --hair: #d2d7db;
+  --panel: #eff1f2;
+  --link: #0a4f8a;
+  --adv: #ffd400;   /* Advice */
+  --wa: #ff7f00;    /* Watch and Act */
+  --em: #d50032;    /* Emergency Warning */
+  --hot-new: #d50032; --hot-day: #f08a00; --hot-old: #a59c8f;
+  --font: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", Verdana, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 17px/1.5 var(--font); }
+a { color: var(--link); text-underline-offset: 3px; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; box-shadow: 0 0 0 6px var(--adv); }
+.num { font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+
+/* emergency strip + masthead */
+.zero { background: var(--adv); color: var(--ink); font-size: 15px; }
+.zero .wrap { padding-block: 7px; }
+.zero strong { font-weight: 800; }
+.mast { background: var(--ink); color: #fff; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 1000; }
+.mast .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 12px; color: #fff; text-decoration: none; font-weight: 800; font-size: 22px; letter-spacing: -.01em; }
+.brand svg { flex: none; }
+.mast nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.mast nav a { color: #fff; text-decoration: none; font-weight: 700; font-size: 16px; padding: 8px 10px; }
+.mast nav a:hover { text-decoration: underline; text-decoration-thickness: 2px; }
+
+/* page head */
+.head { padding-block: 36px 20px; display: grid; grid-template-columns: 1fr auto; gap: 8px 32px; align-items: end; }
+h1 { margin: 0; font-size: clamp(30px, 4.4vw, 44px); line-height: 1.1; font-weight: 800; letter-spacing: -.015em; text-wrap: balance; }
+.asof { margin: 0; color: var(--ink-2); font-size: 16px; }
+.asof b { color: var(--ink); }
+
+/* warning levels row */
+.levels { display: grid; grid-template-columns: 1fr 1fr 1fr 1.25fr; border-top: 4px solid var(--ink); border-bottom: 2px solid var(--ink); margin-bottom: 28px; }
+.level { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; align-items: center; padding: 16px 18px 16px 0; }
+.level + .level { border-left: 2px solid var(--ink); padding-left: 18px; }
+.level .n { font-size: 44px; font-weight: 800; line-height: 1; grid-row: span 2; min-width: 1.2ch; }
+.level .t { font-weight: 700; font-size: 17px; line-height: 1.2; display: flex; align-items: center; gap: 8px; }
+.level .s { color: var(--ink-2); font-size: 14px; line-height: 1.3; }
+.level.zero-n .n { color: var(--ink-2); font-weight: 700; }
+
+/* map */
+.mapbox { border: 2px solid var(--ink); }
+.mapbar { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; padding: 12px 14px; background: var(--panel); border-bottom: 2px solid var(--ink); }
+.seg { display: inline-flex; border: 2px solid var(--ink); }
+.seg button { border: 0; background: var(--paper); padding: 6px 14px; font-weight: 700; font-size: 15px; cursor: pointer; }
+.seg button + button { border-left: 2px solid var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.lbl { font-weight: 700; font-size: 15px; margin-right: 8px; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 20px; }
+.checks label { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; cursor: pointer; }
+.checks input { width: 20px; height: 20px; accent-color: var(--ink); margin: 0; }
+#map { height: 540px; }
+.mapfoot { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; align-items: center; padding: 12px 14px; border-top: 2px solid var(--ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 2px solid var(--ink); background: var(--paper); padding: 5px 12px; font-weight: 700; font-size: 15px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.sw { width: 18px; height: 12px; display: inline-block; border: 1px solid var(--ink); }
+.danger-legend[hidden], .hot-legend[hidden] { display: none; }
+
+.tfb { margin: 18px 0 0; padding: 12px 16px; background: var(--panel); font-size: 16px; border-left: 6px solid var(--ink); }
+
+/* sections */
+section.block { padding-top: 56px; }
+h2 { margin: 0 0 4px; font-size: clamp(26px, 3vw, 32px); font-weight: 800; letter-spacing: -.01em; line-height: 1.15; }
+.lede { margin: 0 0 20px; color: var(--ink-2); max-width: 62ch; }
+.tools { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 14px; }
+.search { flex: 1 1 260px; display: flex; border: 2px solid var(--ink); }
+.search input { flex: 1; border: 0; padding: 9px 12px; min-width: 0; background: var(--paper); }
+.search input:focus-visible { box-shadow: none; outline-offset: -3px; }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 16px; }
+th { text-align: left; font-weight: 700; font-size: 14px; padding: 10px 12px; border-bottom: 3px solid var(--ink); white-space: nowrap; vertical-align: bottom; }
+td { padding: 12px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+th.r, td.r { text-align: right; }
+td.rank { font-weight: 800; color: var(--ink-2); width: 3ch; }
+.fname { font-weight: 700; }
+.fname a { color: var(--ink); text-decoration: none; }
+.fname a:hover { text-decoration: underline; }
+.place { color: var(--ink-2); font-size: 15px; }
+.awsinline { display: inline-flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 700; margin-left: 8px; vertical-align: 1px; white-space: nowrap; }
+.state { font-weight: 700; font-size: 14px; letter-spacing: .02em; }
+.status { display: inline-flex; align-items: flex-start; gap: 8px; white-space: nowrap; }
+.status i { width: 14px; height: 14px; border: 2px solid var(--ink); display: inline-block; flex: none; margin-top: 5px; }
+.status.out_of_control i { background: var(--ink); }
+.status.being_controlled i { background: linear-gradient(90deg, var(--ink) 50%, transparent 50%); }
+.status .ag { color: var(--ink-2); font-size: 14px; display: block; }
+.size { font-weight: 700; }
+.muted { color: var(--ink-2); }
+.pager { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 16px; }
+.pager button { border: 2px solid var(--ink); background: var(--paper); min-width: 40px; padding: 6px 10px; font-weight: 700; cursor: pointer; }
+.pager button[aria-current="page"] { background: var(--ink); color: #fff; }
+.pager button:disabled { border-color: var(--hair); color: var(--ink-2); cursor: default; }
+.pager .of { margin-left: auto; color: var(--ink-2); font-size: 15px; }
+
+/* warnings */
+.warns { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--ink); }
+.warns li { display: grid; grid-template-columns: 168px 1fr auto; border-bottom: 1px solid var(--hair); }
+.wlevel { display: flex; align-items: center; gap: 10px; padding: 14px; font-weight: 800; font-size: 15px; }
+.wlevel.advice { background: var(--adv); }
+.wlevel.watch_act { background: var(--wa); }
+.wlevel.emergency { background: var(--em); color: #fff; }
+.wbody { padding: 12px 16px; min-width: 0; }
+.wbody b { display: block; }
+.wtime { padding: 12px 16px; color: var(--ink-2); font-size: 15px; white-space: nowrap; }
+.more { margin-top: 14px; border: 2px solid var(--ink); background: var(--paper); padding: 8px 16px; font-weight: 700; cursor: pointer; }
+
+/* states */
+.rating { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; white-space: nowrap; }
+.rating i { width: 30px; height: 16px; border: 1px solid var(--ink); display: inline-block; }
+td a.stname { font-weight: 700; color: var(--ink); }
+
+footer { margin-top: 72px; background: var(--ink); color: #fff; }
+footer .wrap { padding-block: 36px 90px; display: grid; grid-template-columns: 2fr 1fr; gap: 24px 48px; }
+footer p { margin: 0 0 12px; max-width: 64ch; }
+footer a { color: #fff; }
+footer h3 { margin: 0 0 8px; font-size: 15px; }
+footer .src { color: #c9cfd4; font-size: 15px; }
+
+/* map markers */
+.leaflet-container { font: 14px/1.3 var(--font); background: #e5ebef; }
+.leaflet-control-attribution { font-size: 11px; }
+.leaflet-bar a { border-radius: 0 !important; color: var(--ink); font-weight: 700; }
+.leaflet-bar { border: 2px solid var(--ink) !important; border-radius: 0 !important; box-shadow: none !important; }
+.st-label { color: #5b6670; font-weight: 700; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap; transform: translate(-50%, -50%); pointer-events: none; }
+.fm { display: block; }
+
+@media (max-width: 860px) {
+  .levels { grid-template-columns: repeat(2, 1fr); }
+  .level:nth-child(3) { border-left: 0; padding-left: 0; }
+  .level:nth-child(n+3) { border-top: 2px solid var(--ink); }
+  .head { grid-template-columns: 1fr; }
+  footer .wrap { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  #map { height: 430px; }
+  .level .n { font-size: 36px; }
+  .warns li { grid-template-columns: 1fr auto; }
+  .wlevel { grid-column: 1 / -1; padding: 8px 14px; }
+  .level { grid-template-columns: 1fr; padding-right: 10px; }
+  .level .n { grid-row: auto; }
+  .level .s { display: none; }
+  #top-fires thead { display: none; }
+  #top-fires tr { display: grid; grid-template-columns: 2.2em 1fr auto; column-gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--hair); }
+  #top-fires td { border: 0; padding: 0; }
+  #top-fires td.rank { grid-row: span 2; padding-top: 1px; }
+  #top-fires td.size { text-align: right; grid-column: 3; grid-row: 1; }
+  #top-fires td:nth-child(2) { grid-column: 2; grid-row: 1; }
+  #top-fires td:nth-child(4) { grid-column: 2 / -1; grid-row: 2; padding-top: 6px; font-size: 15px; }
+  #top-fires .col-upd, #top-fires .col-state { display: none; }
+  .status .ag { display: inline; margin-left: 6px; }
+  .mast nav a { padding: 6px 6px; font-size: 15px; }
+}
+</style>
+</head>
+<body>
+<div class="zero"><div class="wrap"><strong>In an emergency, call Triple Zero (000).</strong> Follow advice from your state fire agency and emergency broadcaster.</div></div>
+<header class="mast">
+  <div class="wrap">
+    <a class="brand" href="#">
+      <svg width="30" height="27" viewBox="0 0 30 27" aria-hidden="true"><path d="M15 2 28 25H2Z" fill="#ffd400" stroke="#ffd400" stroke-width="2.5" stroke-linejoin="round"/><path d="M15 9.5c1.7 2.2 3.6 3.7 3.6 6.4a3.6 3.6 0 0 1-7.2 0c0-1.4.6-2.4 1.4-3.2.2 1.1.8 1.9 1.6 2.2-.3-2.1.1-3.8.6-5.4z" fill="#0f1720"/></svg>
+      Bushfire Explorer
+    </a>
+    <nav aria-label="Primary"><a href="#top-fires">Top fires</a><a href="#states">By state</a><a href="#">Near me</a><a href="#">Sources</a></nav>
+  </div>
+</header>
+
+<main class="wrap" id="main">
+  <div class="head">
+    <h1>Bushfires in Australia</h1>
+    <p class="asof">Updated <b id="asof"></b>. Feeds refresh every 1 to 5 minutes.</p>
+  </div>
+
+  <div class="levels" id="levels"></div>
+
+  <div class="mapbox">
+    <div class="mapbar">
+      <div><span class="lbl" id="ov-lbl">Map shows</span><span class="seg" role="group" aria-labelledby="ov-lbl"><button type="button" id="ov-hot" aria-pressed="true">Satellite hotspots</button><button type="button" id="ov-fdr" aria-pressed="false">Fire danger today</button></span></div>
+      <div class="checks"><label><input type="checkbox" id="c-per" checked> Fire perimeters</label><label><input type="checkbox" id="c-war" checked> Warning areas</label><label><input type="checkbox" id="c-sat"> Satellite photo</label></div>
+    </div>
+    <div id="map" role="region" aria-label="Map of fires in Australia"></div>
+    <div class="mapfoot">
+      <div class="chips" role="group" aria-label="Show on map"><button type="button" class="chip" aria-pressed="true" id="ch-act"></button><button type="button" class="chip" aria-pressed="false" id="ch-ctl"></button><button type="button" class="chip" aria-pressed="false" id="ch-pln"></button></div>
+      <div class="legend hot-legend" id="lg-hot">
+        <span><svg width="16" height="14" viewBox="0 0 16 14" aria-hidden="true"><path d="M8 1 15 13H1Z" fill="#ffd400" stroke="#0f1720" stroke-width="1.4" stroke-linejoin="round"/></svg>Advice</span>
+        <span><svg width="16" height="14" viewBox="0 0 16 14" aria-hidden="true"><path d="M8 1 15 13H1Z" fill="#ff7f00" stroke="#0f1720" stroke-width="1.4" stroke-linejoin="round"/></svg>Watch and Act</span>
+        <span><svg width="16" height="14" viewBox="0 0 16 14" aria-hidden="true"><path d="M8 1 15 13H1Z" fill="#d50032" stroke="#0f1720" stroke-width="1.4" stroke-linejoin="round"/></svg>Emergency</span>
+        <span><i class="dot" style="background:#0f1720;box-shadow:0 0 0 2px #fff,0 0 0 3px #0f1720"></i>Fire, no warning</span>
+        <span><i class="dot" style="background:var(--hot-new)"></i>Hotspot under 3 h</span>
+        <span><i class="dot" style="background:var(--hot-day)"></i>Under 24 h</span>
+      </div>
+      <div class="legend danger-legend" id="lg-fdr" hidden></div>
+    </div>
+  </div>
+  <p class="tfb"><strong>Total Fire Ban today:</strong> none declared. For Tasmania and the Northern Territory, check the state agency.</p>
+
+  <section class="block" id="top-fires" aria-labelledby="h-top">
+    <h2 id="h-top">Top active fires</h2>
+    <p class="lede">The largest fires burning in Australia, ranked by known size. Many new fires have no size reported yet.</p>
+    <div class="tools">
+      <div class="search"><label class="vh" for="q" style="position:absolute;left:-9999px">Search fires</label><input id="q" type="search" placeholder="Search fires, towns or councils"></div>
+      <div class="chips" role="group" aria-label="Fire type"><button type="button" class="chip" aria-pressed="false">All</button><button type="button" class="chip" aria-pressed="true">Bushfires</button><button type="button" class="chip" aria-pressed="false">Planned burns</button></div>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th scope="col">#</th><th scope="col">Fire</th><th scope="col" class="col-state">State</th><th scope="col">Status</th><th scope="col" class="r">Size (ha)</th><th scope="col" class="r col-upd">Updated</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="pager" id="pager"></div>
+  </section>
+
+  <section class="block" aria-labelledby="h-warn">
+    <h2 id="h-warn">Current warnings</h2>
+    <p class="lede">Australian Warning System alerts issued by fire agencies, highest level first.</p>
+    <ul class="warns" id="warns"></ul>
+    <button type="button" class="more" id="more"></button>
+  </section>
+
+  <section class="block" id="states" aria-labelledby="h-states">
+    <h2 id="h-states">By state and territory</h2>
+    <p class="lede">Each state page lists incidents from that agency and fire danger ratings by district.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th scope="col">State or territory</th><th scope="col" class="r">Active fires</th><th scope="col" class="r">Warnings</th><th scope="col" class="r">Hotspots, 24 h</th><th scope="col">Highest fire danger today</th><th scope="col">Largest known fire</th></tr></thead>
+        <tbody id="strows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <p><strong>Bushfire Explorer is for information only.</strong> It is not a replacement for official sources. Always follow advice and warnings from your state fire agency and emergency broadcaster. In an emergency call 000.</p>
+      <p class="src">Data: NSW RFS, VicEmergency, QFD, SA CFS, DFES, TFS, ACT ESA, Geoscience Australia, Bureau of Meteorology via Esri, NAFI, Open-Meteo. Snapshot for design review.</p>
+    </div>
+    <div><h3>Theme</h3><p class="src">Light · Auto · Dark</p></div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="shared/geo.js"></script>
+<script src="shared/data.js"></script>
+<script src="shared/danger.js"></script>
+<script src="shared/kit.js"></script>
+<script src="shared/nav.js"></script>
+<script>
+(function () {
+  const { esc, ha, num, ago } = K;
+  const AWS = { advice: '#ffd400', watch_act: '#ff7f00', emergency: '#d50032' };
+  const tri = (a, s) => `<svg width="${s}" height="${Math.round(s * .88)}" viewBox="0 0 16 14" aria-hidden="true"><path d="M8 1 15 13H1Z" fill="${AWS[a]}" stroke="#0f1720" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 5v4" stroke="${a === 'emergency' ? '#fff' : '#0f1720'}" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11" r=".9" fill="${a === 'emergency' ? '#fff' : '#0f1720'}"/></svg>`;
+
+  document.getElementById('asof').textContent = K.snapDate + ', ' + K.snapTime + ' AEDT';
+  const c = K.counts;
+  const lv = (n, t, s, icon) => `<div class="level${n === 0 ? ' zero-n' : ''}"><span class="n num">${typeof n === 'number' ? num(n) : n}</span><span class="t">${icon || ''}${t}</span><span class="s">${s}</span></div>`;
+  document.getElementById('levels').innerHTML =
+    lv(c.emergency, 'Emergency Warning', 'Act now to protect life', tri('emergency', 18)) +
+    lv(c.watch, 'Watch and Act', 'Conditions are changing', tri('watch_act', 18)) +
+    lv(c.advice, 'Advice', 'Stay up to date', tri('advice', 18)) +
+    lv(c.hotspots, 'Satellite hotspots', 'Heat detected in the last 24 hours');
+
+  document.getElementById('ch-act').textContent = c.active + ' active fires';
+  document.getElementById('ch-ctl').textContent = c.controlled + ' under control';
+  document.getElementById('ch-pln').textContent = c.planned + ' planned burns';
+
+  // map
+  const map = K.map(document.getElementById('map'), {
+    sea: '#e5ebef',
+    neighbour: { color: '#c3cbd1', weight: .6, fillColor: '#f3f5f6', fillOpacity: 1 },
+    state: { color: '#8c979f', weight: 1, fillColor: '#ffffff', fillOpacity: 1 },
+    danger: (p) => ({ stroke: true, color: '#ffffff', weight: .5, fillColor: K.RATING_COLOR[p.rating] || '#fff', fillOpacity: p.rating === 'No Rating' ? 0 : .78 }),
+    hot: (h) => h.ageH < 3 ? { radius: 2.6, stroke: false, fillColor: '#d50032', fillOpacity: .95 } : h.ageH < 24 ? { radius: 2, stroke: false, fillColor: '#f08a00', fillOpacity: .7 } : null,
+    labels: (s) => s === 'ACT' ? null : `<span>${K.STATE_NAME[s]}</span>`,
+    fireIcon: (f) => f.alert
+      ? L.divIcon({ className: 'fm', html: tri(f.alert, 24), iconSize: [24, 21], iconAnchor: [12, 14] })
+      : L.divIcon({ className: 'fm', html: '<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" fill="#0f1720" stroke="#fff" stroke-width="2"/></svg>', iconSize: [14, 14], iconAnchor: [7, 7] }),
+  });
+  document.querySelectorAll('.st-label span').forEach((s) => s.parentNode.style.fontSize = '11px');
+
+  const hotBtn = document.getElementById('ov-hot'), fdrBtn = document.getElementById('ov-fdr');
+  document.getElementById('lg-fdr').innerHTML = K.RATING_ORDER.slice(1).map((r) => `<span><i class="sw" style="background:${K.RATING_COLOR[r]}"></i>${r}</span>`).join('') + '<span><i class="sw" style="background:#fff"></i>No rating</span>';
+  function overlay(fdr) {
+    hotBtn.setAttribute('aria-pressed', String(!fdr)); fdrBtn.setAttribute('aria-pressed', String(fdr));
+    if (fdr) { map.removeLayer(map.layers.hot); map.layers.danger.addTo(map); map.layers.fires.remove(); map.layers.fires.addTo(map); }
+    else { map.removeLayer(map.layers.danger); map.layers.hot.addTo(map); }
+    document.getElementById('lg-fdr').hidden = !fdr; document.getElementById('lg-hot').hidden = fdr;
+  }
+  hotBtn.onclick = () => overlay(false); fdrBtn.onclick = () => overlay(true);
+
+  // table
+  const PER = 15, list = K.ranked;
+  function rows(page) {
+    const slice = list.slice((page - 1) * PER, page * PER);
+    document.getElementById('rows').innerHTML = slice.map((f) => `<tr>
+      <td class="rank num">${f.rank}</td>
+      <td><div class="fname"><a href="#">${esc(f.name)}</a>${f.alert ? `<span class="awsinline">${tri(f.alert, 15)}${K.ALERT_LABEL[f.alert]}</span>` : ''}</div><div class="place">${esc(f.place)}</div></td>
+      <td class="col-state"><span class="state">${f.state}</span></td>
+      <td><span class="status ${f.status}"><i aria-hidden="true"></i><span>${esc(f.statusText)}${f.agencyStatus && f.agencyStatus.toLowerCase() !== f.statusText.toLowerCase() ? `<span class="ag">Agency: ${esc(f.agencyStatus)}</span>` : ''}</span></span></td>
+      <td class="r num size">${f.sizeHa != null ? ha(f.sizeHa) : '<span class="muted" title="Size not reported">—</span>'}</td>
+      <td class="r col-upd muted num">${ago(f.updated)}</td></tr>`).join('');
+    const pages = Math.ceil(list.length / PER);
+    let h = `<button type="button" ${page === 1 ? 'disabled' : ''} data-p="${page - 1}">Previous</button>`;
+    for (let i = 1; i <= pages; i++) h += `<button type="button" data-p="${i}" ${i === page ? 'aria-current="page"' : ''}>${i}</button>`;
+    h += `<button type="button" ${page === pages ? 'disabled' : ''} data-p="${page + 1}">Next</button><span class="of">${list.length} active fires</span>`;
+    const pg = document.getElementById('pager'); pg.innerHTML = h;
+    pg.querySelectorAll('button[data-p]').forEach((b) => b.onclick = () => rows(+b.dataset.p));
+  }
+  rows(1);
+
+  // warnings
+  let all = false;
+  function warns() {
+    const w = all ? K.warnings : K.warnings.slice(0, 6);
+    document.getElementById('warns').innerHTML = w.map((x) => `<li>
+      <div class="wlevel ${x.alert}">${tri(x.alert, 20)}${K.ALERT_LABEL[x.alert]}</div>
+      <div class="wbody"><b>${esc(x.title)}</b><span class="muted">${x.state} · ${esc(x.place)}</span></div>
+      <div class="wtime num">${ago(x.updated)}</div></li>`).join('');
+    const b = document.getElementById('more');
+    b.textContent = all ? 'Show fewer warnings' : `Show all ${K.warnings.length} warnings`;
+  }
+  document.getElementById('more').onclick = () => { all = !all; warns(); };
+  warns();
+
+  // states
+  document.getElementById('strows').innerHTML = K.byState.map((s) => `<tr>
+    <td><a class="stname" href="#">${s.name}</a></td>
+    <td class="r num">${s.noFeed ? '<span class="muted" title="No public incident feed">No feed</span>' : s.active}</td>
+    <td class="r num">${s.warnings}</td>
+    <td class="r num">${num(s.hotspots)}</td>
+    <td>${s.danger ? `<span class="rating"><i style="background:${K.RATING_COLOR[s.danger]}"></i>${s.danger}</span>` : '—'}</td>
+    <td>${s.largest ? `${esc(s.largest.name)} <span class="muted">· ${ha(s.largest.sizeHa)} ha</span>` : '<span class="muted">No sizes reported</span>'}</td></tr>`).join('');
+})();
+</script>
+</body>
+</html>
