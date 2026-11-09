@@ -3346,8 +3346,10 @@ AUF.util = (function () {
   const statusLabel = (f) => f.statusLabel || STATUS_TXT[f.status] || 'Unknown';
   const stCls = (f) => f.kind === 'planned' ? 'st-planned' : 'st-' + f.status;
   const isStale = (f) => f.updated && (Date.now() - Date.parse(f.updated)) > 3 * 864e5;
-  const fireHref = (uid) => '#/fire/' + encodeURIComponent(uid);
-  const stateHref = (st) => '#/state/' + st.toLowerCase();
+  // State pages live at real paths (/nsw/ … /act/) so search engines can index them; fire and warning views stay in
+  // the #fragment of the home page.
+  const fireHref = (uid) => '/#/fire/' + encodeURIComponent(uid);
+  const stateHref = (st) => '/' + st.toLowerCase() + '/';
   const adapterFor = (x) => AUF.adapters.find(a => a.id === String(x.uid).split(':')[0]) || {};
 
   // ---------- icons ----------
@@ -3532,7 +3534,7 @@ AUF.util = (function () {
   // ---------- selections ----------
   // A warning whose fire is listed is "linked": the fire carries the top level; lower-level ones are extra areas for it.
   const linkedFire = (w) => w.fireUid ? S.fireByUid.get(w.fireUid) : null;
-  const warnHref = (w) => '#/warning/' + encodeURIComponent(w.uid);
+  const warnHref = (w) => '/#/warning/' + encodeURIComponent(w.uid);
   function allWarnings(st) {
     const a = S.fires.filter(f => f.alert && (!st || f.state === st)).map(f => ({ fire: f, alert: f.alert, title: prettyName(f.name), sub: f.headline || f.location || '', state: f.state, updated: f.updated, href: fireHref(f.uid) }));
     const b = S.warnings.filter(w => w.alert && (!st || w.state === st)).map(w => { const f = linkedFire(w); return { alert: w.alert, title: w.title || ALERT_TXT[w.alert], sub: f ? 'Also issued for ' + prettyName(f.name) : 'Warning not tied to a listed fire', state: w.state, updated: w.updated, href: warnHref(w) }; });
@@ -3568,6 +3570,9 @@ AUF.util = (function () {
   const mapFires = (st) => S.fires.filter(f => (!st || f.state === st) && (S.ui.show[cat(f)] || f.alert));
 
   // ---------- router ----------
+  const STATE_PATH = /^\/(nsw|vic|qld|sa|wa|tas|nt|act)\/?$/i;
+  const pathState = (path) => { const m = STATE_PATH.exec(path || ''); return m ? m[1].toUpperCase() : null; };
+  // The route comes from the path (/nsw/) unless the #fragment names a fire, warning or state.
   function parseHash() {
     let h = (location.hash || '').replace(/^#/, '');
     try { h = decodeURIComponent(h); } catch (e) { /* a truncated link ("%3"): keep the raw text */ }
@@ -3575,9 +3580,28 @@ AUF.util = (function () {
     if ((m = h.match(/^\/state\/([a-z]+)/i)) && STATES.includes(m[1].toUpperCase())) return { view: 'state', st: m[1].toUpperCase() };
     if ((m = h.match(/^\/fire\/(.+)$/))) return { view: 'fire', uid: m[1] };
     if ((m = h.match(/^\/warning\/(.+)$/))) return { view: 'warning', uid: m[1] };
-    if ((m = h.match(/^\/(top|states)$/))) return { view: 'home', anchor: m[1] === 'top' ? 'top-fires' : 'states' };
     if (/^[a-z]{2,3}:.+/.test(h)) return { view: 'fire', uid: h }; // legacy #nsw:123 links
+    const ps = pathState(location.pathname);
+    if (ps) return { view: 'state', st: ps };
+    if ((m = h.match(/^\/(top|states)$/))) return { view: 'home', anchor: m[1] === 'top' ? 'top-fires' : 'states' };
     return { view: 'home' };
+  }
+  // Old #/state/nsw links (and /nsw/#/state/nsw) move to the state's real path without a new history entry.
+  function canonicalizeUrl() {
+    let h = location.hash || '';
+    try { h = decodeURIComponent(h); } catch (e) { /* keep raw */ }
+    const m = h.match(/^#\/state\/([a-z]+)\/?$/i);
+    if (m && STATES.includes(m[1].toUpperCase())) {
+      try { history.replaceState(history.state, '', stateHref(m[1].toUpperCase())); } catch (e) { /* file:// or sandboxed: keep the hash route */ }
+    }
+  }
+  // Same-site links to the home page or a state page change the URL without reloading the app (feeds stay loaded).
+  function inAppUrl(a) {
+    const href = a.getAttribute('href');
+    if (!href || href.charAt(0) !== '/' || href.charAt(1) === '/' || a.target === '_blank' || a.hasAttribute('download')) return null;
+    let u; try { u = new URL(href, location.href); } catch (e) { return null; }
+    if (u.origin !== location.origin || u.search) return null;
+    return u.pathname === '/' || pathState(u.pathname) ? u : null;
   }
   // Each history entry gets a key in history.state, so Back/Forward (not a fresh click) restores that entry's list
   // page and scroll position. Scroll restoration is manual so the browser's own restore doesn't fight the re-render.
@@ -3603,6 +3627,7 @@ AUF.util = (function () {
   ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(t => window.addEventListener(t, () => { S.pending = null; }, { passive: true, capture: true }));
   function closeMenu() { $('#menu').hidden = true; $('#burger').setAttribute('aria-expanded', 'false'); }
   function onRoute() {
+    canonicalizeUrl();
     const r = parseHash(), prev = S.route, key = entryKey();
     const same = prev && prev.view === r.view && prev.st === r.st && prev.uid === r.uid;
     if (curKey && curKey !== key) navMem.set(curKey, { page: S.table.page, y: window.scrollY, warnAll: S.warnAll });
@@ -3712,6 +3737,26 @@ AUF.util = (function () {
   }
   function degradedOnce(panel, e) { const k = panel + ':' + (S.route.st || ''); if (detailsSent.has(k)) return; detailsSent.add(k); track('details_degraded', { panels_failed: panel + ':' + errKind(e && e.message || e), parts_failed: 'none' }); }
   const cleanQuery = (q) => q.toLowerCase().replace(/\S+@\S+/g, '[email]').replace(/\d/g, '#').replace(/\s+/g, ' ').slice(0, 40);
+  // Title, description and canonical URL for the page the route belongs to. tools/build.mjs writes the same strings
+  // into the static pages; keep the two in step.
+  function pageMeta(st) {
+    if (!st) return { path: '/', title: 'Bushfire map Australia: live fires and warnings - Bushfire Explorer', description: 'Live map of Australian bushfires from every state fire agency, with warnings, fire danger ratings and total fire bans. Unofficial.' };
+    const ad = AUF.adapters.find(a => a.state === st);
+    return { path: stateHref(st), title: `${st} fire map: live ${STATE_NAME[st]} bushfires and warnings today`,
+      description: st === 'NT' ? 'Live Northern Territory bushfire map: satellite hotspots and NAFI burnt areas, fire danger ratings and total fire bans.'
+        : `Live ${STATE_NAME[st]} bushfire map: incidents and warnings from ${STATE_AGENCY[st] || (ad && ad.label) || 'the state fire agency'}, fire danger ratings and total fire bans.` };
+  }
+  const STATE_AGENCY = { NSW: 'NSW Rural Fire Service', VIC: 'VicEmergency (CFA, DEECA and FRV)', QLD: 'Queensland Fire Department', SA: 'SA Country Fire Service and MFS', WA: 'Emergency WA (DFES) and DBCA', TAS: 'Tasmania Fire Service', ACT: 'ACT Emergency Services Agency' };
+  // A view whose fire or warning isn't listed asks search engines not to index it (it is a soft error page).
+  function setHead(meta, noindex) {
+    document.title = meta.title;
+    const tag = (sel, make) => document.head.querySelector(sel) || document.head.appendChild(make());
+    tag('meta[name="description"]', () => Object.assign(document.createElement('meta'), { name: 'description' })).setAttribute('content', meta.description);
+    tag('link[rel="canonical"]', () => Object.assign(document.createElement('link'), { rel: 'canonical' })).setAttribute('href', 'https://bushfiremap.com' + meta.path);
+    let rb = document.head.querySelector('meta[name="robots"]');
+    if (noindex && !rb) { rb = document.createElement('meta'); rb.name = 'robots'; rb.content = 'noindex'; document.head.appendChild(rb); }
+    else if (!noindex && rb) rb.remove();
+  }
   function renderView(isNav, fromRefresh) {
     const view = $('#view'), active = document.activeElement;
     // Replacing the search box mid-composition breaks IME / Android keyboard input, and replacing the overlay <select>
@@ -3729,12 +3774,12 @@ AUF.util = (function () {
     if (!isNav) KEEP.forEach(id => { const el = document.getElementById(id); if (el && !isPlaceholder(el)) keep[id] = [el.innerHTML, el.getAttribute('style')]; });
     mountMap(null); // park the map before replacing markup
     const r = S.route;
-    let html = '', title = 'Bushfire Explorer';
-    if (r.view === 'state') { html = stateView(r.st); title = STATE_NAME[r.st] + ' Fires Map | Bushfire Explorer'; }
-    else if (r.view === 'fire') { const f = S.fireByUid.get(r.uid); html = fireView(f, r.uid); trackFire(f); title = f ? prettyName(f.name) + ' | ' + STATE_NAME[f.state] + ' | Bushfire Explorer' : title; }
-    else if (r.view === 'warning') { const w = S.warnings.find(x => x.uid === r.uid); html = warningView(w, r.uid); trackWarning(w); }
-    else { html = homeView(); title = 'Bushfire Explorer | Live Bushfire Map & Incident Data for Australia'; }
-    document.title = title;
+    let html = '', meta = pageMeta(r.view === 'state' ? r.st : null), missing = false;
+    if (r.view === 'state') html = stateView(r.st);
+    else if (r.view === 'fire') { const f = S.fireByUid.get(r.uid); html = fireView(f, r.uid); trackFire(f); missing = !f; if (f) meta.title = `${prettyName(f.name)}, ${STATE_NAME[f.state]}: map and status - Bushfire Explorer`; }
+    else if (r.view === 'warning') { const w = S.warnings.find(x => x.uid === r.uid); html = warningView(w, r.uid); trackWarning(w); missing = !w; if (w) meta.title = `${w.title || ALERT_TXT[w.alert]} (${w.state} ${ALERT_TXT[w.alert] || 'warning'}) - Bushfire Explorer`; }
+    else html = homeView();
+    setHead(meta, missing);
     view.innerHTML = html;
     Object.keys(keep).forEach(id => { const el = document.getElementById(id); if (el && isPlaceholder(el)) { el.innerHTML = keep[id][0]; if (keep[id][1]) el.setAttribute('style', keep[id][1]); } });
     mountMap($('.mapslot', view));
@@ -3845,7 +3890,7 @@ AUF.util = (function () {
         <div class="counts">${s === 'NT' ? `<span>Satellite only · <b>${hsN == null ? '…' : hsN.toLocaleString('en-AU')}</b> hotspots</span>` : `<span><b>${a.length}</b> active</span><span><b>${w.length}</b> warning${w.length === 1 ? '' : 's'}</span><span><b>${hsN == null ? '…' : hsN.toLocaleString('en-AU')}</b> hotspots</span>`}</div>
         <div class="lg">${s === 'NT' ? 'No public incident feed. See PFES for official info.' : st && st.state === 'err' ? '<span style="color:var(--em-ink)">Feed unavailable</span>' : big ? `Largest: <strong>${esc(prettyName(big.name))}</strong> · ${esc(fmtHa(big.sizeHa))} ha` : a.length ? 'Sizes not yet reported' : 'No active fires listed'}${tfb ? ` · <span style="color:var(--em-ink);font-weight:700">${banNoun(s)}</span>` : ''}</div></a>`;
     }).join('');
-    return `<div class="home-top"><h1>Australia</h1><span>Active fires, warnings and satellite hotspots</span></div>
+    return `<div class="home-top"><h1>Australia bushfire map</h1><span>Active fires, warnings and satellite hotspots</span></div>
       ${mapCard({})}
       <div class="alertstrip">${stat(lv('emergency'), 'Emergency Warnings', awsSvg('emergency', 26))}${stat(lv('watch_act'), 'Watch and Act', awsSvg('watch_act', 26))}${stat(lv('advice'), 'Advice', awsSvg('advice', 26))}${stat(hs, 'Satellite hotspots in the last 24 h')}</div>
       ${tfbLine()}
@@ -3863,15 +3908,15 @@ AUF.util = (function () {
     const agencyCard = st === 'NT'
       ? `<div class="agency"><span>Official NT incidents: <a href="https://www.pfes.nt.gov.au/incidentmap" target="_blank" rel="noopener">PFES Fire Incident Map ↗</a> · <a href="https://www.securent.nt.gov.au/" target="_blank" rel="noopener">SecureNT ↗</a> · Burnt areas: <a href="https://firenorth.org.au/nafi3/" target="_blank" rel="noopener">NAFI ↗</a></span></div>`
       : ad ? `<div class="agency"><span><span class="dotok ${as ? (as.state === 'err' ? 'err' : as.state === 'loading' && !S.byAdapter[ad.id] ? 'loading' : '') : 'loading'}"></span>${as && as.state === 'err' ? `<strong>${esc(ad.label)} feed unavailable</strong> — ${esc(as.error)}` : `Data from <strong>${esc(ad.label)}</strong>${as && as.count != null ? ` · ${as.count} incidents` : ''}${as && as.at ? ` · fetched ${esc(rel(new Date(as.at).toISOString()))}` : ''}`}</span><a href="${esc(ad.homepage)}" target="_blank" rel="noopener">Official ${esc(st)} incidents ↗</a></div>` : '';
-    return `<a class="back" href="#/states">← All states</a>
-      <header class="statehead"><h1>${STATE_NAME[st]} Fires</h1><hr><p class="lede">${lede}</p><p class="updated-line">${latest ? 'Updated ' + esc(latest.toLocaleString('en-AU', { timeZone: U.TZ[st], day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })) : 'Loading…'}</p></header>
+    return `<a class="back" href="/#/states">← All states</a>
+      <header class="statehead"><h1>${STATE_NAME[st]} fire map</h1><hr><p class="lede">${lede}</p><p class="updated-line">${latest ? 'Updated ' + esc(latest.toLocaleString('en-AU', { timeZone: U.TZ[st], day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })) : 'Loading…'}</p></header>
       ${mapCard({ st, tabs: true })}
       ${tfbLine()}
       ${warnList(st)}
       ${st === 'NT' ? '' : `<section class="section" id="top-fires"><h2 class="big-h">Top active fires</h2><p class="big-sub">The largest fires burning in ${STATE_NAME[st]}, ranked by known size.</p>${rankTable(st)}</section>`}
       <section class="section" id="danger"><h2 class="big-h">Fire danger by district</h2><p class="big-sub">Australian Fire Danger Rating System forecasts for ${STATE_NAME[st]}'s fire weather districts.</p><div class="panel"><div class="tablewrap" id="fdrtable"><div class="loading">Loading fire danger ratings</div></div></div></section>
       <section class="section">${agencyCard}</section>
-      <a class="viewall" href="#/states">View all states →</a>`;
+      <a class="viewall" href="/#/states">View all states →</a>`;
   }
 
   // A uid that isn't listed: wait only for the feed that owns it (the uid prefix is the adapter id), and say so when
@@ -3885,7 +3930,7 @@ AUF.util = (function () {
     else if (ad && !have && as.error) body = `<h1 class="big-h" style="font-size:30px">${esc(ad.label)} feed unavailable</h1><p class="big-sub">This ${what} can't be shown while the agency's feed is unreachable. The page will update when the feed is back. Meanwhile, check <a href="${esc(ad.homepage)}" target="_blank" rel="noopener">${esc(ad.label)} ↗</a>.</p>${stateLink}`;
     else body = what === 'fire' ? `<h1 class="big-h" style="font-size:30px">Fire not found</h1><p class="big-sub">This incident is no longer in the agency's feed. It may have been closed or merged.</p>${stateLink}` : `<h1 class="big-h" style="font-size:30px">Warning no longer current</h1>${stateLink}`;
     if (!(ad && !have && (!as || (as.state === 'loading' && !as.error)))) trackMissing(uid, what, ad && !have ? 'feed_down' : ad ? 'not_found' : 'unknown_source');
-    return `<a class="back" href="#/">← All fires</a><div class="empty" style="padding:60px 0">${body}</div>`;
+    return `<a class="back" href="/">← All fires</a><div class="empty" style="padding:60px 0">${body}</div>`;
   }
   function fireView(f, uid) {
     if (!f) return missingView(uid, 'fire');
@@ -4263,11 +4308,18 @@ AUF.util = (function () {
   document.querySelectorAll('[data-theme-set]').forEach(b => b.onclick = () => setTheme(b.dataset.themeSet));
   (() => { let t = 'system'; try { t = localStorage.getItem('auf-theme') || 'system'; } catch (e) { /* ignore */ } document.querySelectorAll('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.themeSet === t)); })();
   window.addEventListener('hashchange', onRoute);
-  // A link to the hash already showing fires no hashchange: route it anyway, so it closes the menu and re-scrolls.
+  window.addEventListener('popstate', onRoute); // Back/Forward between in-app path changes (a repeat after hashchange is a no-op)
+  // In-app links: path changes go through the History API; a link to the URL already showing routes anyway, so it
+  // closes the menu and re-scrolls (a link to the current hash fires no hashchange).
   document.addEventListener('click', e => {
-    const a = e.target.closest && e.target.closest('a[href^="#/"]');
-    if (a) pendingVia = { via: viaFor(a), at: Date.now() };
-    if (a && !e.defaultPrevented && e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) && a.getAttribute('href') === location.hash) { e.preventDefault(); onRoute(); }
+    const a = e.target.closest && e.target.closest('a[href^="#/"], a[href^="/"]');
+    if (!a) return;
+    const u = a.getAttribute('href').charAt(0) === '#' ? new URL(a.getAttribute('href'), location.href) : inAppUrl(a);
+    if (u) pendingVia = { via: viaFor(a), at: Date.now() };
+    if (!u || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (u.href === location.href) { e.preventDefault(); onRoute(); return; }
+    // Same path + a #fragment is a plain hash navigation (hashchange); anything else would reload the page.
+    if (u.pathname !== location.pathname || !u.hash) { e.preventDefault(); try { history.pushState(null, '', u.href); } catch (x) { location.href = u.href; return; } onRoute(); }
   });
   // Outbound links (all open in a new tab, so the page stays and the event is sent normally). auxclick = middle-click.
   const outKind = (a) => a.closest('.actions') ? (a.classList.contains('primary') ? (S.route.view === 'warning' ? 'official_warning' : 'incident_page') : 'agency_home') : a.closest('.agency') ? 'agency_state_page' : a.closest('#fdrtable, .tfbnote') ? 'fire_ban' : a.closest('#sources') ? 'sources_dialog' : a.closest('.leaflet-control-attribution') ? 'map_attribution' : a.closest('.foot') ? 'footer' : 'other';
@@ -4282,6 +4334,7 @@ AUF.util = (function () {
   window.addEventListener('resize', () => map.invalidateSize());
   try { history.scrollRestoration = 'manual'; } catch (e) { /* ignore */ }
   setInterval(() => tick(false), TICK_MS);
+  canonicalizeUrl();
   S.route = parseHash(); curKey = entryKey();
   if (S.route.anchor) S.pending = { anchor: S.route.anchor, until: Date.now() + PENDING_MS }; // instant, so no smooth scroll for a render to cancel
   routeVia = takeVia();

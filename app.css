@@ -434,3 +434,14 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
 .rhead .r { display: flex; justify-content: flex-end; }
 @media (max-width: 720px) { .rhead .h-state, .rhead .h-cont { display: none; } }
 
+
+/* ---------- static page shell (served in the HTML for crawlers and no-JS readers; the app replaces it) ---------- */
+.shell-map .mapbar { min-height: 56px; }
+.shell-text { max-width: 72ch; margin-left: auto; margin-right: auto; }
+.shell-text p { color: var(--ink-2); margin: 0 0 14px; }
+.shell-text h2 { font: 800 24px/1.2 var(--serif); margin: 30px 0 12px; }
+.shell-links { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.shell-links a { display: inline-block; border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 11px; text-decoration: none; font-size: 14px; }
+.shell-links a:hover { border-color: var(--ink-3); }
+.shell-note { font-size: 14px; color: var(--ink-3); margin: 22px 0 0; }
+.shell-links + .shell-note { margin-top: 28px; }
