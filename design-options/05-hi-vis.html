@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>05 Hi-Vis · Bushfire Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Libre+Franklin:wght@400;600;700;800&display=swap">
+<link rel="stylesheet" href="shared/leaflet.css">
+<style>
+/* Hi-Vis — emergency-vehicle livery: Battenburg checks, rear chevrons on anything live, heavy condensed numerals,
+   status as solid blocks. White ground, black, signal yellow and fire-appliance red only. */
+:root {
+  --white: #ffffff;
+  --black: #111111;
+  --yellow: #ffd200;
+  --red: #d71920;
+  --grey: #ececec;
+  --ink-2: #4a4a4a;
+  --display: "Big Shoulders Display", "Oswald", Impact, "Arial Narrow", sans-serif;
+  --text: "Libre Franklin", "Franklin Gothic Medium", Arial, sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--white); color: var(--black); font: 400 16px/1.5 var(--text); }
+a { color: inherit; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--black); outline-offset: 2px; box-shadow: 0 0 0 6px var(--yellow); }
+.num { font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); }
+.batten { height: 28px; background: repeating-conic-gradient(var(--yellow) 0 25%, var(--red) 0 50%) 0 0 / 28px 28px; }
+.chev { background: repeating-linear-gradient(-45deg, var(--red) 0 14px, var(--yellow) 14px 28px); }
+
+.mast { background: var(--black); color: var(--white); }
+.mast .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; min-height: 68px; }
+.wordmark { font: 900 30px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; color: var(--yellow); text-decoration: none; display: flex; align-items: center; gap: 12px; padding-block: 12px; }
+.mast nav { display: flex; gap: 4px 20px; flex-wrap: wrap; }
+.mast nav a { text-decoration: none; font: 700 13px/1 var(--text); letter-spacing: .12em; text-transform: uppercase; padding: 8px 0; }
+.mast nav a:hover { color: var(--yellow); }
+
+.hero { display: grid; grid-template-columns: 1fr auto; gap: 8px 24px; align-items: end; padding-block: 30px 22px; }
+h1 { margin: 0; font: 900 clamp(48px, 8vw, 104px)/.86 var(--display); text-transform: uppercase; letter-spacing: -.005em; }
+h1 span { display: block; color: var(--red); }
+.asof { margin: 0; font-weight: 600; font-size: 14px; text-align: right; }
+.asof b { display: block; font: 800 26px/1 var(--display); letter-spacing: .02em; }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 4px solid var(--black); }
+.stat { position: relative; padding: 18px 20px 16px; display: flex; flex-direction: column; justify-content: space-between; min-height: 150px; }
+.stat + .stat { border-left: 4px solid var(--black); }
+.stat .n { font: 900 84px/.85 var(--display); }
+.stat .t { font: 800 14px/1.2 var(--text); text-transform: uppercase; letter-spacing: .08em; }
+.stat.live { background: var(--yellow); }
+.stat.live::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 14px; background: repeating-linear-gradient(-45deg, var(--red) 0 12px, var(--yellow) 12px 24px); border-bottom: 3px solid var(--black); }
+.stat.live .n { margin-top: 12px; }
+.stat.zero .n { color: #bdbdbd; }
+.stat.dark { background: var(--black); color: var(--white); }
+.stat.dark .n { color: var(--yellow); }
+.tfb { margin: 0; padding: 10px 16px; border: 4px solid var(--black); border-top: 0; font-weight: 600; font-size: 14px; }
+.tfb b { font: 800 16px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; margin-right: 8px; }
+
+.mapbox { margin-top: 28px; border: 4px solid var(--black); }
+.mapbar { display: flex; justify-content: space-between; align-items: stretch; flex-wrap: wrap; background: var(--black); color: var(--white); }
+.mapbar .seg { display: flex; }
+.mapbar .seg button { border: 0; background: transparent; padding: 12px 18px; font: 800 18px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; color: var(--white); }
+.mapbar .seg button[aria-pressed="true"] { background: var(--yellow); color: var(--black); }
+.mapbar .tg { display: flex; gap: 4px 18px; align-items: center; padding: 8px 16px; flex-wrap: wrap; font: 700 13px/1 var(--text); text-transform: uppercase; letter-spacing: .08em; }
+.mapbar label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.mapbar input { accent-color: var(--yellow); width: 17px; height: 17px; margin: 0; }
+#map { height: 580px; }
+.mapft { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px 20px; padding: 12px 14px; border-top: 4px solid var(--black); }
+.blocks { display: flex; gap: 6px; flex-wrap: wrap; }
+.blocks button { border: 3px solid var(--black); background: var(--white); padding: 6px 12px; font: 800 16px/1 var(--display); letter-spacing: .05em; text-transform: uppercase; cursor: pointer; }
+.blocks button[aria-pressed="true"] { background: var(--black); color: var(--yellow); }
+.key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+
+section { margin-top: 64px; }
+.shd { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px 24px; flex-wrap: wrap; border-bottom: 4px solid var(--black); padding-bottom: 10px; margin-bottom: 0; }
+h2 { margin: 0; font: 900 clamp(40px, 5vw, 60px)/.9 var(--display); text-transform: uppercase; }
+.shd p { margin: 0; max-width: 52ch; font-weight: 600; font-size: 15px; }
+.tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 0; border-bottom: 2px solid var(--black); }
+.tools input { flex: 1 1 260px; min-width: 0; border: 3px solid var(--black); padding: 8px 12px; font-weight: 600; }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font: 800 15px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; padding: 10px 12px; background: var(--black); color: var(--yellow); white-space: nowrap; }
+td { padding: 12px; border-bottom: 2px solid var(--black); vertical-align: middle; }
+th.r, td.r { text-align: right; }
+.rk { font: 900 40px/.9 var(--display); width: 64px; }
+.nm { font-weight: 800; font-size: 17px; line-height: 1.25; }
+.nm a { text-decoration: none; }
+.nm a:hover { background: var(--yellow); }
+.pl { color: var(--ink-2); font-size: 14px; }
+.blk { display: inline-block; padding: 5px 9px 4px; font: 800 15px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; border: 2px solid var(--black); }
+.blk.out_of_control { background: var(--red); color: var(--white); border-color: var(--red); }
+.blk.being_controlled { background: var(--yellow); }
+.blk.under_control { background: var(--white); }
+.blk.adv { background: var(--yellow); margin-left: 8px; vertical-align: 2px; font-size: 13px; padding: 3px 6px 2px; }
+.sz { font: 800 28px/1 var(--display); }
+.sz.none { color: #bdbdbd; }
+.st { font: 800 20px/1 var(--display); letter-spacing: .04em; }
+.pager { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding-top: 14px; }
+.pager button { border: 3px solid var(--black); background: var(--white); min-width: 42px; padding: 6px 10px; font: 800 18px/1 var(--display); cursor: pointer; }
+.pager button[aria-current] { background: var(--black); color: var(--yellow); }
+.pager button:disabled { border-color: #ccc; color: #bbb; cursor: default; }
+.pager .of { margin-left: auto; font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; }
+
+.warns { list-style: none; margin: 0; padding: 0; }
+.warns li { display: grid; grid-template-columns: 150px 1fr auto; border-bottom: 2px solid var(--black); align-items: stretch; }
+.warns .lv { display: flex; align-items: center; gap: 8px; padding: 12px 14px; font: 900 22px/1 var(--display); text-transform: uppercase; letter-spacing: .04em; background: var(--yellow); border-right: 2px solid var(--black); }
+.warns .bd { padding: 12px 16px; min-width: 0; }
+.warns .bd b { display: block; font-size: 17px; }
+.warns .tm { padding: 12px 14px; font: 800 20px/1 var(--display); white-space: nowrap; align-self: center; }
+.more { margin-top: 14px; border: 3px solid var(--black); background: var(--black); color: var(--yellow); padding: 10px 18px; font: 800 18px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+
+.states { display: grid; grid-template-columns: repeat(4, 1fr); border-left: 4px solid var(--black); border-top: 4px solid var(--black); }
+.sc { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-right: 4px solid var(--black); border-bottom: 4px solid var(--black); text-decoration: none; min-height: 170px; }
+.sc:hover { background: var(--yellow); }
+.sc .nmx { font: 900 26px/.95 var(--display); text-transform: uppercase; }
+.sc .big { font: 900 64px/.85 var(--display); margin-top: auto; }
+.sc .big small { font: 800 15px/1 var(--display); letter-spacing: .08em; margin-left: 6px; }
+.sc .ln { font-size: 14px; font-weight: 600; }
+.sc .rt { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--black); vertical-align: -1px; margin-right: 5px; }
+.sc.nofeed { background: var(--grey); }
+
+footer { margin-top: 72px; background: var(--black); color: var(--white); }
+footer .wrap { padding-block: 30px 90px; display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px 40px; font-size: 14px; }
+footer p { margin: 0 0 10px; }
+footer strong { color: var(--yellow); font: 800 18px/1.2 var(--display); letter-spacing: .04em; text-transform: uppercase; display: block; margin-bottom: 4px; }
+
+.leaflet-container { font-family: var(--text); }
+.leaflet-bar { border: 3px solid var(--black) !important; border-radius: 0 !important; box-shadow: none !important; }
+.leaflet-bar a { border-radius: 0 !important; color: var(--black); font-weight: 800; }
+.leaflet-control-attribution { font-size: 10px; }
+.st-label { transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; font: 800 13px/1 var(--display); letter-spacing: .16em; text-transform: uppercase; color: #9a9a9a; }
+.mk { line-height: 0; }
+.mk .b { display: grid; place-items: center; width: 20px; height: 20px; background: var(--black); color: var(--yellow); font: 900 13px/1 var(--display); }
+
+@media (max-width: 900px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .stat:nth-child(3) { border-left: 0; }
+  .stat:nth-child(n+3) { border-top: 4px solid var(--black); }
+  .states { grid-template-columns: repeat(2, 1fr); }
+  footer .wrap { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .hero { grid-template-columns: 1fr; }
+  .asof { text-align: left; }
+  .stat { min-height: 116px; padding: 14px; }
+  .stat .n { font-size: 58px; }
+  #map { height: 430px; }
+  .mapbar .seg button { padding: 10px 12px; font-size: 16px; }
+  .warns li { grid-template-columns: 1fr auto; }
+  .warns .lv { grid-column: 1 / -1; border-right: 0; border-bottom: 2px solid var(--black); padding: 8px 12px; font-size: 18px; }
+  #top thead { display: none; }
+  #top tr { display: grid; grid-template-columns: 48px 1fr auto; column-gap: 10px; padding: 12px 0; border-bottom: 2px solid var(--black); }
+  #top td { padding: 0; border: 0; }
+  #top td:nth-child(1) { grid-row: span 2; }
+  #top td:nth-child(2) { grid-column: 2; grid-row: 1; }
+  #top td:nth-child(5) { grid-column: 3; grid-row: 1; }
+  #top td:nth-child(4) { grid-column: 2 / -1; grid-row: 2; padding-top: 8px; }
+  #top .col-st, #top .col-upd { display: none; }
+  .rk { font-size: 34px; }
+  .sc .big { font-size: 48px; }
+  .sc { min-height: 140px; padding: 12px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="mast"><div class="wrap">
+    <a class="wordmark" href="#"><svg width="26" height="30" viewBox="0 0 26 30" aria-hidden="true"><path d="M13 1c-1.6 5-8 8-8 16a8 8 0 0 0 16 0c0-3.6-1.8-6.2-3.6-8 0 2.7-1.3 4.4-3 4.9C15.5 10 14.6 5.4 13 1z" fill="#ffd200"/></svg>Bushfire Explorer</a>
+    <nav aria-label="Primary"><a href="#top">Top fires</a><a href="#states">By state</a><a href="#">Near me</a><a href="#">Sources</a></nav>
+  </div></div>
+  <div class="batten" role="presentation"></div>
+</header>
+
+<main class="wrap">
+  <div class="hero">
+    <h1>Fires across<span>Australia</span></h1>
+    <p class="asof">Updated<b id="asof"></b><span id="asofd"></span></p>
+  </div>
+
+  <div class="stats" id="stats"></div>
+  <p class="tfb"><b>Total fire ban</b>None declared today. Tasmania and Northern Territory: check the state agency.</p>
+
+  <div class="mapbox">
+    <div class="mapbar">
+      <div class="seg" role="group" aria-label="Map overlay"><button type="button" id="ov-hot" aria-pressed="true">Hotspots</button><button type="button" id="ov-fdr" aria-pressed="false">Fire danger</button></div>
+      <div class="tg"><label><input type="checkbox" checked> Perimeters</label><label><input type="checkbox" checked> Warning areas</label><label><input type="checkbox"> Satellite</label></div>
+    </div>
+    <div id="map" role="region" aria-label="Map of fires in Australia"></div>
+    <div class="mapft"><div class="blocks" id="blocks"></div><div class="key" id="key"></div></div>
+  </div>
+
+  <section id="top" aria-labelledby="h-top">
+    <div class="shd"><h2 id="h-top">Top active fires</h2><p>Largest first, by known size. New fires often have no size reported yet.</p></div>
+    <div class="tools"><label for="q" style="position:absolute;left:-9999px">Search</label><input id="q" type="search" placeholder="Search fires, towns or councils"><div class="blocks"><button type="button" aria-pressed="false">All</button><button type="button" aria-pressed="true">Bushfires</button><button type="button" aria-pressed="false">Planned</button></div></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>No.</th><th>Fire</th><th class="col-st">State</th><th>Status</th><th class="r">Hectares</th><th class="r col-upd">Updated</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <div class="pager" id="pager"></div>
+  </section>
+
+  <section aria-labelledby="h-warn">
+    <div class="shd"><h2 id="h-warn">Warnings</h2><p>Australian Warning System alerts from fire agencies, highest level first.</p></div>
+    <ul class="warns" id="warns"></ul>
+    <button type="button" class="more" id="more"></button>
+  </section>
+
+  <section id="states" aria-labelledby="h-st">
+    <div class="shd" style="border-bottom:0"><h2 id="h-st">By state</h2><p>State pages list each agency’s incidents and today’s fire danger by district.</p></div>
+    <div class="states" id="sts"></div>
+  </section>
+</main>
+
+<footer>
+  <div class="batten" role="presentation"></div>
+  <div class="wrap">
+    <div><p><strong>For information only</strong>Bushfire Explorer does not replace official sources. Always follow advice and warnings from your state fire agency and emergency broadcaster. In an emergency call 000.</p></div>
+    <div><p>NSW RFS · VicEmergency · QFD · SA CFS · DFES · TFS · ACT ESA · Geoscience Australia · Bureau of Meteorology via Esri · NAFI · Open-Meteo</p></div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="shared/geo.js"></script>
+<script src="shared/data.js"></script>
+<script src="shared/danger.js"></script>
+<script src="shared/kit.js"></script>
+<script src="shared/nav.js"></script>
+<script>
+(function () {
+  const { esc, ha, num, ago, agoShort } = K;
+  const tri = (s = 16) => `<svg width="${s}" height="${Math.round(s * .88)}" viewBox="0 0 16 14" aria-hidden="true"><path d="M8 1 15 13H1Z" fill="#ffd200" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 5v4" stroke="#111" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="11" r="1" fill="#111"/></svg>`;
+  document.getElementById('asof').textContent = K.snapTime.toUpperCase() + ' AEDT';
+  document.getElementById('asofd').textContent = K.snapDate;
+  const c = K.counts;
+  const st = (n, t, cls) => `<div class="stat ${cls}"><span class="n num">${num(n)}</span><span class="t">${t}</span></div>`;
+  document.getElementById('stats').innerHTML = st(c.emergency, 'Emergency Warnings', c.emergency ? 'live' : 'zero') + st(c.watch, 'Watch and Act', c.watch ? 'live' : 'zero') + st(c.advice, 'Advice', c.advice ? 'live' : 'zero') + st(c.hotspots, 'Satellite hotspots, 24 h', 'dark');
+
+  const map = K.map(document.getElementById('map'), {
+    sea: '#e2e2e2',
+    neighbour: { color: '#bdbdbd', weight: .6, fillColor: '#f1f1f1', fillOpacity: 1 },
+    state: { color: '#111', weight: 1, fillColor: '#ffffff', fillOpacity: 1 },
+    danger: (p) => ({ color: '#111', weight: .3, fillColor: K.RATING_COLOR[p.rating], fillOpacity: p.rating === 'No Rating' ? 0 : .85 }),
+    hot: (h) => h.ageH < 3 ? { radius: 2.8, stroke: false, fillColor: '#d71920', fillOpacity: 1 } : { radius: 2, stroke: false, fillColor: '#d71920', fillOpacity: .38 },
+    labels: (s) => s === 'ACT' ? null : `<span>${K.STATE_NAME[s]}</span>`,
+    fireIcon: (f) => f.alert ? L.divIcon({ className: 'mk', html: tri(24), iconSize: [24, 21], iconAnchor: [12, 14] })
+      : f.rank <= 15 ? L.divIcon({ className: 'mk', html: `<span class="b">${f.rank}</span>`, iconSize: [20, 20] })
+      : L.divIcon({ className: 'mk', html: '<svg width="10" height="10"><rect x="1" y="1" width="8" height="8" fill="#111" stroke="#fff" stroke-width="1"/></svg>', iconSize: [10, 10] }),
+  });
+  const hb = document.getElementById('ov-hot'), fb = document.getElementById('ov-fdr');
+  const ov = (fdr) => { hb.setAttribute('aria-pressed', !fdr); fb.setAttribute('aria-pressed', fdr); if (fdr) { map.removeLayer(map.layers.hot); map.layers.danger.addTo(map); } else { map.removeLayer(map.layers.danger); map.layers.hot.addTo(map); } };
+  hb.onclick = () => ov(false); fb.onclick = () => ov(true);
+  document.getElementById('blocks').innerHTML = `<button type="button" aria-pressed="true">${c.active} active</button><button type="button" aria-pressed="false">${c.controlled} under control</button><button type="button" aria-pressed="false">${c.planned} planned</button>`;
+  document.getElementById('key').innerHTML = `<span>${tri(15)}Advice</span><span><span class="mk"><span class="b" style="width:16px;height:16px;font-size:11px">1</span></span>Ranked fire</span><span><svg width="10" height="10"><circle cx="5" cy="5" r="3" fill="#d71920"/></svg>Hotspot &lt; 3 h</span><span><svg width="10" height="10"><circle cx="5" cy="5" r="2.4" fill="#d71920" fill-opacity=".38"/></svg>&lt; 24 h</span>`;
+
+  const PER = 15;
+  function page(p) {
+    const list = K.ranked, pages = Math.ceil(list.length / PER);
+    document.getElementById('rows').innerHTML = list.slice((p - 1) * PER, p * PER).map((f) => `<tr>
+      <td class="rk num">${f.rank}</td>
+      <td><div class="nm"><a href="#">${esc(f.name)}</a>${f.alert ? '<span class="blk adv">Advice</span>' : ''}</div><div class="pl">${esc(f.place)}</div></td>
+      <td class="col-st st">${f.state}</td>
+      <td><span class="blk ${f.status}">${esc(f.agencyStatus)}</span></td>
+      <td class="r"><span class="sz num${f.sizeHa == null ? ' none' : ''}">${f.sizeHa != null ? ha(f.sizeHa) : '—'}</span></td>
+      <td class="r st col-upd">${agoShort(f.updated)}</td></tr>`).join('');
+    let h = `<button type="button" data-p="${p - 1}" ${p === 1 ? 'disabled' : ''}>‹</button>`;
+    for (let i = 1; i <= pages; i++) h += `<button type="button" data-p="${i}" ${i === p ? 'aria-current="page"' : ''}>${i}</button>`;
+    h += `<button type="button" data-p="${p + 1}" ${p === pages ? 'disabled' : ''}>›</button><span class="of">${list.length} active fires</span>`;
+    const el = document.getElementById('pager'); el.innerHTML = h; el.querySelectorAll('[data-p]').forEach((x) => x.onclick = () => page(+x.dataset.p));
+  }
+  page(1);
+
+  let all = false;
+  function warns() {
+    document.getElementById('warns').innerHTML = (all ? K.warnings : K.warnings.slice(0, 6)).map((w) => `<li><div class="lv">${tri(20)}${K.ALERT_LABEL[w.alert]}</div><div class="bd"><b>${esc(w.title)}</b><span class="pl">${w.state} · ${esc(w.place)}</span></div><div class="tm">${agoShort(w.updated)}</div></li>`).join('');
+    document.getElementById('more').textContent = all ? 'Show fewer' : `All ${K.warnings.length} warnings`;
+  }
+  document.getElementById('more').onclick = () => { all = !all; warns(); };
+  warns();
+
+  document.getElementById('sts').innerHTML = K.byState.map((s) => `<a href="#" class="sc${s.noFeed ? ' nofeed' : ''}"><span class="nmx">${s.name}</span>
+    <span class="big num">${s.noFeed ? '—' : s.active}<small>${s.noFeed ? 'No feed' : 'Active'}</small></span>
+    <span class="ln">${s.noFeed ? `${num(s.hotspots)} hotspots` : `${s.warnings} warning${s.warnings === 1 ? '' : 's'} · ${num(s.hotspots)} hotspots`}</span>
+    <span class="ln">${s.danger ? `<i class="rt" style="background:${K.RATING_COLOR[s.danger]}"></i>${s.danger} fire danger` : ''}</span></a>`).join('');
+})();
+</script>
+</body>
+</html>
