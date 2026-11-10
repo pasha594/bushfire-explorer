@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bushfire Explorer Design Options</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Source+Sans+3:wght@400;600;700&display=swap">
+<style>
+/* Review document: a quiet index so the ten options carry the visual weight. Serif headings, sans text, one red. */
+:root {
+  --bg: #fafaf7;
+  --fg: #1d1c1a;
+  --fg-2: #5f5d58;
+  --rule: #dddbd4;
+  --card: #ffffff;
+  --accent: #b3361f;
+  --tag: #efeee9;
+  --serif: "Source Serif 4", Georgia, serif;
+  --sans: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #161614; --fg: #ecebe6; --fg-2: #a9a69e; --rule: #34332f; --card: #1e1e1b; --accent: #ef7a5c; --tag: #2a2a26; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #161614; --fg: #ecebe6; --fg-2: #a9a69e; --rule: #34332f; --card: #1e1e1b; --accent: #ef7a5c; --tag: #2a2a26; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 17px/1.55 var(--sans); }
+a { color: var(--accent); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.num { font-variant-numeric: tabular-nums; }
+
+header .wrap { padding-block: 48px 26px; }
+.kicker { font: 600 13px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--fg-2); margin: 0 0 12px; }
+h1 { margin: 0; font: 600 clamp(32px, 4.6vw, 52px)/1.06 var(--serif); letter-spacing: -.015em; text-wrap: balance; max-width: 18ch; }
+.intro { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px 48px; margin-top: 22px; }
+.intro p { margin: 0 0 12px; max-width: 62ch; }
+.how { border-left: 3px solid var(--accent); padding: 2px 0 2px 18px; font-size: 16px; }
+.how h2 { margin: 0 0 6px; font: 600 15px/1.3 var(--sans); }
+.how ul { margin: 0; padding-left: 18px; }
+.how li { margin: 4px 0; }
+
+h2.sec { font: 600 26px/1.2 var(--serif); margin: 0 0 14px; letter-spacing: -.01em; }
+.overview { padding-block: 26px 10px; }
+.tablewrap { overflow-x: auto; border-top: 2px solid var(--fg); }
+table { width: 100%; border-collapse: collapse; font-size: 16px; }
+th { text-align: left; font: 600 13px/1.2 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--fg-2); padding: 10px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+td { padding: 10px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+td a { font-weight: 600; }
+.sw { display: inline-flex; gap: 0; vertical-align: middle; border: 1px solid var(--rule); }
+.sw i { display: block; width: 14px; height: 14px; }
+.tag { display: inline-block; font: 600 12px/1 var(--sans); letter-spacing: .05em; padding: 4px 7px; border-radius: 3px; background: var(--tag); color: var(--fg); white-space: nowrap; }
+.tag.bold { background: var(--fg); color: var(--bg); }
+
+.picks { margin-top: 26px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.pick { border-top: 2px solid var(--fg); padding-top: 10px; }
+.pick h3 { margin: 0 0 4px; font: 600 15px/1.3 var(--sans); }
+.pick p { margin: 0; font-size: 16px; color: var(--fg-2); }
+
+.opt { padding-block: 56px 8px; border-bottom: 1px solid var(--rule); }
+.opt-hd { display: flex; align-items: baseline; gap: 8px 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.opt-hd .no { font: 600 15px/1 var(--sans); color: var(--fg-2); }
+.opt-hd h2 { margin: 0; font: 600 clamp(26px, 3vw, 34px)/1.1 var(--serif); letter-spacing: -.01em; }
+.opt-hd .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.opt-hd .open { margin-left: auto; font-weight: 700; white-space: nowrap; }
+.shots { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 14px; align-items: start; }
+.shots a { display: block; border: 1px solid var(--rule); background: var(--card); line-height: 0; }
+.shots a:hover { border-color: var(--accent); }
+.shots img { width: 100%; height: auto; display: block; }
+.shots .ph { aspect-ratio: 585 / 1266; overflow: hidden; }
+.cols { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 18px 36px; margin-top: 20px; }
+.cols h3 { margin: 0 0 6px; font: 700 13px/1.2 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-2); }
+.cols p { margin: 0 0 10px; }
+.cols ul { margin: 0; padding-left: 18px; }
+.cols li { margin: 3px 0; }
+.pal { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-size: 13px; color: var(--fg-2); }
+.pal span { display: inline-flex; align-items: center; gap: 6px; }
+.pal i { width: 18px; height: 18px; border: 1px solid var(--rule); display: inline-block; }
+.type { font-size: 16px; }
+.type b { font-weight: 600; }
+
+.notes { padding-block: 48px 90px; }
+.notes .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 48px; }
+.notes p { margin: 0 0 12px; max-width: 62ch; }
+
+@media (max-width: 900px) {
+  .intro, .cols { grid-template-columns: 1fr; }
+  .picks { grid-template-columns: 1fr; }
+  .notes .grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .shots { grid-template-columns: 1fr 34%; gap: 8px; }
+  .opt-hd .open { margin-left: 0; }
+  .hide-s { display: none; }
+}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <p class="kicker">bushfiremap.com · Design review</p>
+  <h1>Ten directions for Bushfire Explorer</h1>
+  <div class="intro">
+    <div>
+      <p>Each option is a working homepage built on the same content as the live site: the map with its overlays, warning counts, the ranked fire list, current warnings and the state list. All figures are real, taken from a snapshot of the agency feeds at 10:44 am AEDT on Tuesday 10 November 2026.</p>
+      <p>Six options keep today’s layout and change the type, colour and components. Four rearrange the page. Five are restrained enough to ship as they are; five are deliberately bolder. Each is shown in one colour mode; the one you choose gets its second mode next.</p>
+    </div>
+    <div class="how">
+      <h2>How to review</h2>
+      <ul>
+        <li>Open an option, then use the bar at the bottom left to step through the rest with ‹ and ›.</li>
+        <li>These work: the map’s Hotspots / Fire danger switch, paging the fire list, “Show all warnings”, the Atlas gazetteer and the Teletext page keys.</li>
+        <li>Search boxes, filters and links are visual only.</li>
+        <li>Maps are drawn from embedded outlines rather than map tiles, so you can judge how each option styles the map. The production basemap each would use is noted below.</li>
+      </ul>
+    </div>
+  </div>
+</div></header>
+
+<main>
+  <section class="overview wrap" aria-labelledby="h-ov">
+    <h2 class="sec" id="h-ov">At a glance</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>Option</th><th>Tone</th><th>Layout</th><th class="hide-s">Mode</th><th class="hide-s">Type</th><th>Palette</th></tr></thead>
+      <tbody id="ov"></tbody>
+    </table></div>
+    <div class="picks">
+      <div class="pick"><h3>Quickest to ship</h3><p>01 Public Notice or 03 Synoptic. Same layout as today, new type and colour, nothing that needs explaining.</p></div>
+      <div class="pick"><h3>Most distinctive, still serious</h3><p>02 Survey Sheet and 07 Atlas. Both borrow from Australian mapping conventions, which no competitor does.</p></div>
+      <div class="pick"><h3>Boldest worth testing</h3><p>05 Hi-Vis and 09 Departures. Strong identities that still put warnings first.</p></div>
+    </div>
+  </section>
+
+  <div id="options"></div>
+
+  <section class="notes wrap" aria-labelledby="h-notes">
+    <h2 class="sec" id="h-notes">Notes</h2>
+    <div class="grid">
+      <div>
+        <p><strong>What “not AI-generated” meant here.</strong> The competitor sites share a look: near-black ground, Inter-style type, glowing orange circles, rounded floating panels, emoji and pill badges. Every option here instead takes its form from a real Australian or public-information source: warning signage, topographic sheets, Bureau of Meteorology products, park signs, fire-appliance livery, print, atlases, transport boards and broadcast teletext. None uses Inter, glow effects or emoji.</p>
+        <p><strong>Not yet designed.</strong> State pages, the fire detail page, the sources dialog and the second colour mode. These follow once a direction is chosen.</p>
+      </div>
+      <div>
+        <p><strong>Data.</strong> 186 incidents from the seven state and territory feeds (93 active, 28 under control, 65 planned burns), 13 Advice warnings, 12,018 satellite hotspots (maps show a 3,200-point sample) and today’s fire danger ratings for 139 districts. Collected by running bushfiremap.com’s own feed code.</p>
+        <p><strong>Files.</strong> Everything is in <code>design-options/</code> on the <code>claude/gallant-fermi-yu5hwi</code> branch. Each option is one HTML file using shared data and map helpers in <code>design-options/shared/</code>.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const OPTIONS = [
+  { id: '01-public-notice', name: 'Public Notice', tone: 'Safe', layout: 'Reskin', mode: 'Light', type: 'Atkinson Hyperlegible Next',
+    pal: [['#0f1720', 'Ink'], ['#ffffff', 'Paper'], ['#ffd400', 'Advice'], ['#ff7f00', 'Watch and Act'], ['#d50032', 'Emergency'], ['#eff1f2', 'Panel']],
+    concept: 'Uses the visual language Australians already learn from emergency information: Australian Warning System triangles and Fire Danger Rating colours, set in a typeface designed for readers with low vision.',
+    why: ['A yellow “call Triple Zero (000)” strip sits above the masthead.', 'Warning levels are a ruled row of large numerals with the official triangles, not a row of cards.', 'Fire status is shown by shape (filled, half-filled, empty square), so it still works without colour.', 'States are a plain table with today’s highest fire danger rating.'],
+    typeNote: '<b>Atkinson Hyperlegible Next</b> for everything. It was designed by the Braille Institute to keep similar letters (I, l, 1) distinct.',
+    prod: 'Keep the current Esri Light Gray basemap. Dark mode inverts the ground and keeps the warning colours.',
+    risk: 'Plain on purpose. It reads like a well-made government site, which may suit or may feel too official.' },
+  { id: '02-survey-sheet', name: 'Survey Sheet', tone: 'Safe', layout: 'Reskin', mode: 'Light', type: 'Barlow Semi Condensed, Source Serif 4 Italic',
+    pal: [['#1d1d1b', 'Ink'], ['#f8f8f4', 'Paper'], ['#dfe9cc', 'Vegetation'], ['#d2e4ef', 'Sea'], ['#2f6ea5', 'Water'], ['#d2321e', 'Red overprint']],
+    concept: 'Laid out like a printed Geoscience Australia topographic map sheet: the title in the top margin, the map inside a neat line (the ruled frame around a printed map) with a graticule (latitude and longitude lines), a Reference column, and numbered map symbols keyed to an index table.',
+    why: ['Every fire has a grid reference in degrees and minutes, e.g. Peckhams Rd at 29°09′S 152°32′E.', 'State boundaries are dash-dot lines, the coastline is blue, sea names are italic serif, as on printed maps.', 'An “Index to state sheets” mini-map replaces the state cards.', 'A scale bar and an edition date in the margin.'],
+    typeNote: '<b>Barlow Semi Condensed</b> for labels and text, close to map lettering. <b>Source Serif 4 Italic</b> for water names and notes, following the cartographic convention.',
+    prod: 'Pair with OpenTopoMap or Esri World Topographic tiles inside the same frame.',
+    risk: 'Dense. The frame and margin column cost space on phones.' },
+  { id: '03-synoptic', name: 'Synoptic', tone: 'Safe', layout: 'Reskin', mode: 'Light', type: 'Sofia Sans, Sofia Sans Condensed, Red Hat Mono',
+    pal: [['#0e2233', 'Navy ink'], ['#ffffff', 'Paper'], ['#dde7ef', 'Table band'], ['#1d5c99', 'Link blue'], ['#c62d1f', 'Fire red'], ['#e3a33b', 'Hotspot amber']],
+    concept: 'Styled on Bureau of Meteorology data products: an issue line, observation tables with banded headers, small charts drawn to scale, and station-model symbols (the weather-map circle whose fill shows a value) where the fill shows how controlled a fire is.',
+    why: ['A “hotspots by hour” chart shows the real satellite pass times in today’s data.', 'Warnings are grouped by state, like the Bureau’s warnings summary page.', 'Each state shows how its fire weather districts split across danger ratings.', 'Times use the Bureau’s day/time format, e.g. 10/8:38am.'],
+    typeNote: '<b>Sofia Sans</b> for headings, <b>Sofia Sans Condensed</b> for tables, <b>Red Hat Mono</b> for figures and times.',
+    prod: 'Esri Light Gray basemap. The summary row moves above the map; otherwise today’s layout.',
+    risk: 'The most data-heavy option. Casual visitors may find it dry.' },
+  { id: '04-ranger', name: 'Ranger', tone: 'Bold', layout: 'Reskin', mode: 'Light', type: 'Overpass, Overpass Mono',
+    pal: [['#4b3427', 'Sign brown'], ['#f2e8d1', 'Cream'], ['#34553b', 'Park green'], ['#c47a26', 'Ochre'], ['#e4e8df', 'Eucalypt grey'], ['#1f201c', 'Ink']],
+    concept: 'National-park signage: brown routed-timber signs with a cream inset border and highway lettering, the map mounted on a timber noticeboard, and the states as fingerpost signs on a post.',
+    why: ['A real sign component: brown panel, rounded corners, cream line inset from the edge.', 'The “By state” section is a fingerpost, with boards pointing either side of a post.', 'Warnings are yellow park alert notices.', 'Ranked fires appear on the map as small brown numbered signs.'],
+    typeNote: '<b>Overpass</b>, an open-source typeface based on Highway Gothic, the lettering on road and park signs. <b>Overpass Mono</b> for sizes.',
+    prod: 'A muted terrain basemap (Esri World Topographic, desaturated). Dark mode would be a dark-brown night version.',
+    risk: 'Could feel like a theme park if pushed further. Brown is heavy in large areas.' },
+  { id: '05-hi-vis', name: 'Hi-Vis', tone: 'Bold', layout: 'Reskin', mode: 'Light', type: 'Big Shoulders Display, Libre Franklin',
+    pal: [['#111111', 'Black'], ['#ffd200', 'Signal yellow'], ['#d71920', 'Appliance red'], ['#ffffff', 'White'], ['#ececec', 'Grey']],
+    concept: 'Fire-appliance livery: the Battenburg pattern (the yellow-and-red checks on emergency vehicles), rear chevrons on any count that is live, heavy condensed numerals, and fire status as solid colour blocks.',
+    why: ['The chevron stripe appears only on warning counts above zero, so attention follows the data.', 'Rank numbers are set huge, like vehicle call numbers.', 'Statuses are solid blocks: red for out of control, yellow for being controlled.', 'The Battenburg band frames the masthead and the footer only.'],
+    typeNote: '<b>Big Shoulders Display</b>, designed for City of Chicago signage, for headings and numbers. <b>Libre Franklin</b> for text.',
+    prod: 'Esri Light Gray basemap. Dark mode is natural: the masthead is already black.',
+    risk: 'Loud. Chevrons must stay reserved for real alerts or they become noise.' },
+  { id: '06-riso', name: 'Riso', tone: 'Bold', layout: 'Reskin', mode: 'Light', type: 'Archivo Expanded, Courier Prime',
+    pal: [['#2f4fa2', 'Riso Medium Blue'], ['#ff6c2f', 'Riso Orange'], ['#f0efe9', 'Paper'], ['#1f2a52', 'Text']],
+    concept: 'A two-ink risograph print (a stencil printing process popular for zines): blue and fluorescent orange that multiply where they overlap, headings printed slightly out of register, halftone land on the map, paper grain and rubber-stamped warnings.',
+    why: ['A plain-English summary sentence opens the page, written from the data.', 'Only two inks; every colour on the page is one ink, the other, or both overprinted.', 'Each state card carries its own silhouette with fires plotted.', 'Warning stamps sit at slightly different angles, as if stamped by hand.'],
+    typeNote: '<b>Archivo</b> at its widest setting for headings and numbers. <b>Courier Prime</b> for labels and data.',
+    prod: 'Tiles would be desaturated and tinted blue with a CSS filter, with fires multiplied on top. Dark mode is hard for a paper look; it would become a “blue paper” version.',
+    risk: 'The playful print look may feel wrong during a major emergency.' },
+  { id: '07-atlas', name: 'Atlas', tone: 'Safe', layout: 'New layout', mode: 'Light', type: 'EB Garamond, Jost',
+    pal: [['#2b2a33', 'Ink'], ['#fdfdfb', 'Plate'], ['#d4e4ea', 'Sea'], ['#f4dcc7', 'WA tint'], ['#f2d3d7', 'Qld tint'], ['#d7e0f1', 'NSW tint'], ['#b3261e', 'Fire red']],
+    concept: 'A reference-atlas plate. The map fills the page with soft political tints per state and a lettered and numbered grid in the margins. A gazetteer (an atlas index of places) lists every active fire alphabetically with its grid square. Statistics follow as notes and tables.',
+    why: ['Grid squares (e.g. K6) tie every list back to the map.', 'Select a gazetteer entry and its fire is highlighted on the plate.', 'A legend cartouche and a scale bar computed from the map.', 'Numbers are set in a book serif with lining figures.'],
+    typeNote: '<b>EB Garamond</b> for titles, place names and tables. <b>Jost</b>, a geometric sans in the Futura tradition, for labels.',
+    prod: 'The plate stays at national scale; zooming in opens a tiled detail view.',
+    risk: 'Grid references are a learned convention. The fixed national view needs a clear way into detail.' },
+  { id: '08-state-by-state', name: 'State by State', tone: 'Safe', layout: 'New layout', mode: 'Light', type: 'Schibsted Grotesk, Literata',
+    pal: [['#16191b', 'Ink'], ['#f3f4f1', 'Page'], ['#ffffff', 'Panel'], ['#c4381a', 'Fire'], ['#e8953a', 'Hotspot'], ['#ffe46b', 'Highlight']],
+    concept: 'Small multiples (a grid of identically built small charts). Australia has no national fire feed; each state publishes its own. So the page leads with eight equal state panels, each with its own map, counts, danger rating and top fires, under a one-sentence national summary.',
+    why: ['The headline is a sentence written from the data, not a row of tiles.', 'Panels are ordered by active fires; each mini-map has its own scale bar.', 'The Northern Territory panel explains why it shows hotspots only.', 'The full table and warnings sit side by side below.'],
+    typeNote: '<b>Literata</b> for the summary sentence. <b>Schibsted Grotesk</b>, made for a Norwegian news publisher, for everything else.',
+    prod: 'National map on Esri Light Gray tiles; panel maps stay as vector outlines (fast, no tiles needed).',
+    risk: 'The most conventional of the ten. Panels need equal heights as data changes.' },
+  { id: '09-departures', name: 'Departures', tone: 'Bold', layout: 'New layout', mode: 'Dark', type: 'Barlow Condensed, Barlow',
+    pal: [['#0e0f11', 'Ground'], ['#17191c', 'Board'], ['#2a2d31', 'Flap'], ['#f2efe6', 'Characters'], ['#f2b200', 'Signage yellow'], ['#ff6b4a', 'Out of control'], ['#7fc97f', 'Under control']],
+    concept: 'The ranked fire list as a split-flap departures board (the mechanical boards in airports and stations): one flap per character, status in coloured text, warnings as a yellow flap. The flaps settle once when the page loads.',
+    why: ['A wayfinding header with a pictogram and a flap clock.', 'Counters, warnings and states are all flap boards, so the metaphor holds across the page.', 'Long names are truncated as real boards do.', 'One animation on load and none after, which respects reduced-motion settings.'],
+    typeNote: '<b>Barlow Condensed</b> for the flaps and labels, <b>Barlow</b> for text.',
+    prod: 'Esri Dark Gray basemap. A light mode would keep the board dark and lighten the page around it.',
+    risk: 'Truncated names need a tap for detail. The flap effect must stay a one-off.' },
+  { id: '10-teletext', name: 'Teletext', tone: 'Bold', layout: 'New layout', mode: 'Dark', type: 'VT323',
+    pal: [['#000000', 'Black'], ['#ff2b1c', 'Red'], ['#19e619', 'Green'], ['#ffff00', 'Yellow'], ['#1a1aff', 'Blue'], ['#ff2bff', 'Magenta'], ['#00ffff', 'Cyan'], ['#ffffff', 'White']],
+    concept: 'Teletext pages (the text service broadcast on TV from the 1970s to the 2010s): a 40 × 25 character grid, eight colours, double-height banners, a mosaic map built from 2 × 3 block cells, numbered pages and the four coloured Fastext keys.',
+    why: ['The mosaic map plots the real fires and hotspots.', 'Pages 302 to 305 work: use the coloured keys or type a page number.', 'The grid scales to fit a phone at 40 columns.', 'Strict palette: eight colours, no gradients, no shadows.'],
+    typeNote: '<b>VT323</b>, a typeface based on a 1980s terminal, standing in for the teletext character set.',
+    prod: 'A real zoomable map would sit behind the cyan “Map” key. Could also live on as an optional low-bandwidth mode.',
+    risk: 'Novelty. Little information per screen, and the mosaic map cannot zoom.' },
+];
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+document.getElementById('ov').innerHTML = OPTIONS.map((o, i) => `<tr><td class="num">${String(i + 1).padStart(2, '0')}</td><td><a href="${o.id}.html">${o.name}</a></td><td><span class="tag${o.tone === 'Bold' ? ' bold' : ''}">${o.tone}</span></td><td>${o.layout}</td><td class="hide-s">${o.mode}</td><td class="hide-s">${o.type}</td><td><span class="sw" aria-hidden="true">${o.pal.slice(0, 6).map((p) => `<i style="background:${p[0]}"></i>`).join('')}</span></td></tr>`).join('');
+document.getElementById('options').innerHTML = OPTIONS.map((o, i) => `<section class="opt wrap" id="${o.id}" aria-labelledby="h-${o.id}">
+  <div class="opt-hd"><span class="no">${String(i + 1).padStart(2, '0')}</span><h2 id="h-${o.id}">${o.name}</h2><span class="tags"><span class="tag${o.tone === 'Bold' ? ' bold' : ''}">${o.tone}</span><span class="tag">${o.layout}</span><span class="tag">${o.mode}</span></span><a class="open" href="${o.id}.html">Open ${o.name} →</a></div>
+  <div class="shots">
+    <a href="${o.id}.html" aria-label="Open ${o.name}, desktop view"><img src="shots/${o.id}-desktop.jpg" width="1600" height="1000" alt="${o.name} homepage at desktop width" ${i > 1 ? 'loading="lazy"' : ''}></a>
+    <a href="${o.id}.html" class="ph" aria-label="Open ${o.name}, phone view"><img src="shots/${o.id}-phone.jpg" width="585" height="1266" alt="${o.name} homepage at phone width" ${i > 1 ? 'loading="lazy"' : ''}></a>
+  </div>
+  <div class="cols">
+    <div><h3>Idea</h3><p>${o.concept}</p><h3>Choices that make it specific</h3><ul>${o.why.map((w) => `<li>${w}</li>`).join('')}</ul></div>
+    <div><h3>Type</h3><p class="type">${o.typeNote}</p><h3>Colour</h3><div class="pal">${o.pal.map((p) => `<span><i style="background:${p[0]}"></i>${p[1]} <span class="num">${p[0]}</span></span>`).join('')}</div></div>
+    <div><h3>In production</h3><p>${o.prod}</p><h3>Risk</h3><p>${o.risk}</p></div>
+  </div>
+</section>`).join('');
+</script>
+</body>
+</html>
