@@ -12,149 +12,15 @@
 <body>
 <h1 class="vh">Bushfire Explorer, teletext edition</h1>
 <div class="tv"><div class="screen" id="screen" role="main" aria-live="polite"></div></div>
-<form class="entry" id="entry"><label for="pg">Go to page</label><input id="pg" inputmode="numeric" maxlength="3" placeholder="302" autocomplete="off"><button type="submit">Go</button><span id="hint">302 map · 303 fires · 304 warnings · 305 states</span></form>
+<form class="entry" id="entry"><label for="pg">Go to page</label><input id="pg" inputmode="numeric" maxlength="3" placeholder="302" autocomplete="off"><button type="submit">Go</button><span id="hint">302 map · 303 fires · 304 warnings · 305 states · 310 Cloncurry fire</span></form>
 
 <script src="shared/geo.js"></script>
 <script src="shared/data.js"></script>
 <script src="shared/danger.js"></script>
+<script src="shared/fire.js"></script>
 <script src="shared/kit.js"></script>
 <script src="shared/nav.js"></script>
-<script>
-(function () {
-  const { num } = K;
-  const N = 40;
-  const scr = document.getElementById('screen');
-  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const up = (s) => String(s).normalize('NFKD').replace(/[–—]/g, '-').replace(/[^\x20-\x7e]/g, '');
-  const pad = (s, n, right) => { s = up(s); s = s.length > n ? s.slice(0, n) : s; return right ? s.padStart(n) : s.padEnd(n); };
-  // a segment: [text, fg, bg, go]
-  const seg = (t, fg = 'w', bg, go) => ({ t: up(t), fg, bg, go });
-  function row(segs, dh) {
-    let used = 0, html = '';
-    segs.forEach((s) => {
-      let t = s.t; if (used + t.length > N) t = t.slice(0, N - used); used += t.length; if (!t) return;
-      const cls = `s f-${s.fg}${s.bg ? ' b-' + s.bg : ''}`, inner = dh ? `<i>${esc(t)}</i>` : esc(t);
-      html += s.go ? `<button type="button" class="${cls}" data-go="${s.go}">${inner}</button>` : `<span class="${cls}">${inner}</span>`;
-    });
-    if (used < N) html += `<span class="s">${' '.repeat(N - used)}</span>`;
-    return `<div class="row${dh ? ' dh' : ''}">${html}</div>`;
-  }
-  const blank = () => row([]);
-  const time = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short', day: '2-digit', month: 'short' }).format(K.AT).replace(',', '');
-  const clock = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit', hour12: false }).format(K.AT);
-  const header = (p) => row([seg(`P${p} `, 'w'), seg('BUSHFIRE ', 'y'), seg(`${p} `, 'w'), seg(pad(time, 10), 'c'), seg(' ' + clock + ' AEDT', 'y')]);
-  const fastext = () => row([seg(' Top fires', 'k', 'r', 303), seg(' Warnings ', 'k', 'g', 304), seg(' States   ', 'k', 'y', 305), seg(' Map      ', 'k', 'c', 302)]);
-  const banner = (t, bg, fg, right, rfg) => row([seg(' ', fg, bg), seg(pad(t, 22), fg, bg), seg(pad(right || '', 17, true), rfg || fg, bg)], true);
-  const c = K.counts;
+<script src="shared/teletext.js"></script>
 
-  const STC = { out_of_control: 'r', being_controlled: 'y', under_control: 'g' };
-  let sub = 1;
-  const pages = {
-    302() {
-      const r = [header(302), banner('BUSHFIRES', 'b', 'y', 'AUSTRALIA ', 'c'),
-        row([seg(` Live from state agencies at ${clock} AEDT`, 'c')])];
-      for (let i = 0; i < 14; i++) r.push(blank());
-      r.push(row([seg(' ', 'w'), seg(' ', 'r', 'r'), seg(' Fire   ', 'w'), seg(' ', 'y', 'y'), seg(' Hotspot 24h   ', 'w'), seg(' ', 'w', 'w'), seg(' Advice', 'w')]));
-      r.push(row([seg(' ACTIVE FIRES ', 'c'), seg(pad(c.active, 4, true), 'y'), seg('    ADVICE      ', 'c'), seg(pad(c.advice, 3, true), 'y')]));
-      r.push(row([seg(' WATCH+ACT    ', 'c'), seg(pad(c.watch, 4, true), 'w'), seg('    EMERGENCY   ', 'c'), seg(pad(c.emergency, 3, true), 'w')]));
-      r.push(row([seg(' HOTSPOTS 24H ', 'c'), seg(pad(c.hotspots, 6, true), 'y'), seg('  NO TOTAL FIRE BAN', 'g')]));
-      r.push(row([seg(' Top fires ', 'w'), seg('303', 'y', null, 303), seg('  Warnings ', 'w'), seg('304', 'y', null, 304), seg('  States ', 'w'), seg('305', 'y', null, 305)]));
-      r.push(row([seg(' Not for safety-of-life use. Call 000.', 'm')]));
-      r.push(fastext());
-      return r;
-    },
-    303() {
-      const PER = 15, list = K.ranked, n = Math.ceil(list.length / PER); sub = Math.min(Math.max(1, sub), n);
-      const r = [header(303), banner('TOP FIRES', 'r', 'w', `${sub}/${n} `, 'y'), row([seg(' # FIRE                   ST     HA    ', 'c')])];
-      list.slice((sub - 1) * PER, sub * PER).forEach((f) => {
-        r.push(row([seg(pad(f.rank, 2, true) + ' ', 'w'), seg(pad(K.shortName(f), 22) + ' ', STC[f.status] || 'w'), seg(pad(f.state, 3) + ' ', 'c'), seg(pad(f.sizeHa != null ? K.ha(f.sizeHa) : '-', 6, true) + ' ', 'w'), f.alert ? seg('ADV', 'k', 'y') : seg('   ')]));
-      });
-      while (r.length < 19) r.push(blank());
-      r.push(row([seg(' RED ', 'r'), seg('out of control ', 'w'), seg('YEL ', 'y'), seg('being controlled', 'w')]));
-      r.push(row([seg(' GREEN ', 'g'), seg('under control  ', 'w'), seg('ADV', 'k', 'y'), seg(' Advice warning', 'w')]));
-      r.push(row([seg(' Sizes in hectares. - = not reported', 'c')]));
-      r.push(row([seg(' ', 'w'), seg('< Prev', sub > 1 ? 'y' : 'w', null, sub > 1 ? 'prev' : null), seg(pad(`page ${sub} of ${n}`, 26, false).replace(/^/, '        ').slice(0, 26), 'w'), seg('Next >', sub < n ? 'y' : 'w', null, sub < n ? 'next' : null)]));
-      r.push(fastext());
-      return r;
-    },
-    304() {
-      const r = [header(304), banner('WARNINGS', 'g', 'k', `${c.advice} ADVICE `, 'k'), row([seg(' Australian Warning System, highest first', 'c')]), blank()];
-      K.warnings.slice(0, 15).forEach((w) => r.push(row([seg(' ADVICE ', 'k', 'y'), seg(' ' + pad(w.state, 3) + ' ', 'c'), seg(pad(K.shortName({ name: w.title }), 21) + ' ', 'w'), seg(pad(K.agoShort(w.updated), 4, true), 'y')])));
-      while (r.length < 20) r.push(blank());
-      r.push(row([seg(' No Watch and Act or Emergency Warnings', 'g')]));
-      r.push(row([seg(' are in force.', 'g')]));
-      r.push(blank());
-      r.push(fastext());
-      return r;
-    },
-    305() {
-      const r = [header(305), banner('BY STATE', 'y', 'k', 'TODAY ', 'k'), row([seg(' STATE              FIRES WARN  HOT DGR', 'c')])];
-      const DC = { High: 'y', Moderate: 'g', Extreme: 'r', Catastrophic: 'r' };
-      K.byState.forEach((s) => {
-        r.push(row([seg(' ' + pad(s.name.replace('Australian Capital Territory', 'Aust Capital Terr'), 18) + ' ', 'w'), seg(pad(s.noFeed ? '-' : s.active, 4, true) + ' ', s.active ? 'y' : 'w'), seg(pad(s.warnings, 4, true) + ' ', s.warnings ? 'y' : 'w'), seg(pad(s.hotspots, 5, true) + ' ', 'c'), seg(pad((s.danger || '').slice(0, 3).toUpperCase(), 3), DC[s.danger] || 'w')]));
-        r.push(blank());
-      });
-      r.push(row([seg(' DGR = highest fire danger rating today', 'c')]));
-      r.push(row([seg(' MOD', 'g'), seg(' moderate  ', 'w'), seg('HIG', 'y'), seg(' high  ', 'w'), seg('EXT', 'r'), seg(' extreme', 'w')]));
-      r.push(row([seg(' NT publishes no incident feed.', 'm')]));
-      while (r.length < 23) r.push(blank());
-      r.push(fastext());
-      return r;
-    },
-  };
-
-  let current = 302;
-  function show(p) {
-    if (!pages[p]) { document.getElementById('hint').textContent = `Page ${p} not found. Try 302 to 305.`; return; }
-    current = p; scr.innerHTML = pages[p]().join('');
-    scr.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => { const g = b.dataset.go; if (g === 'next') { sub++; show(303); } else if (g === 'prev') { sub--; show(303); } else { if (+g === 303 && current !== 303) sub = 1; show(+g); } });
-    if (p === 302) mosaic();
-  }
-
-  // mosaic map: 40 columns × 14 rows of 2 × 3 block cells, geography kept true to the cell aspect
-  function mosaic() {
-    const cs = getComputedStyle(scr), fs = parseFloat(cs.fontSize);
-    const probe = document.createElement('span'); probe.textContent = '0'.repeat(40); probe.style.visibility = 'hidden'; scr.appendChild(probe);
-    const chW = probe.getBoundingClientRect().width / 40; probe.remove();
-    const lh = scr.querySelector('.row').getBoundingClientRect().height;
-    const ROWS = 14, COLS = 40, sx = COLS * 2, sy = ROWS * 3;
-    const wpx = COLS * chW, hpx = ROWS * lh, latSpan = 37, lat0 = -27.2, lon0 = 133.6;
-    const lonSpan = (wpx / hpx) * latSpan / Math.cos(lat0 * Math.PI / 180);
-    const box = [lon0 - lonSpan / 2, lat0 - latSpan / 2, lon0 + lonSpan / 2, lat0 + latSpan / 2];
-    const grid = K.landGrid(sx, sy, box);
-    const cv = document.createElement('canvas'); cv.className = 'mosaic'; cv.width = sx; cv.height = sy;
-    cv.style.top = (lh * 3 + lh * 2 - lh) + 'px'; // after header + double-height banner + one text row
-    cv.style.top = scr.children[3].offsetTop + 'px';
-    cv.style.width = wpx + 'px'; cv.style.height = hpx + 'px';
-    cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', `Mosaic map of Australia: ${c.active} active fires and ${num(c.hotspots)} hotspots, mostly in the north.`);
-    const x = cv.getContext('2d');
-    const cell = (lon, lat) => [Math.floor((lon - box[0]) / (box[2] - box[0]) * sx), Math.floor((box[3] - lat) / (box[3] - box[1]) * sy)];
-    x.fillStyle = '#19e619';
-    grid.forEach((r, j) => r.forEach((st, i) => { if (st) x.fillRect(i, j, 1, 1); }));
-    const hotCount = {};
-    K.S.hot.forEach((h) => { const [i, j] = cell(h[0], h[1]); const k = i + ',' + j; hotCount[k] = (hotCount[k] || 0) + 1; });
-    x.fillStyle = '#ffff00';
-    Object.entries(hotCount).forEach(([k, n]) => { if (n >= 2) { const [i, j] = k.split(',').map(Number); x.fillRect(i, j, 1, 1); } });
-    x.fillStyle = '#ff2b1c';
-    K.ranked.forEach((f) => { const [i, j] = cell(f.lon, f.lat); x.fillRect(i, j, 1, 1); });
-    x.fillStyle = '#ffffff';
-    K.ranked.filter((f) => f.alert).forEach((f) => { const [i, j] = cell(f.lon, f.lat); x.fillRect(i, j, 1, 1); });
-    scr.appendChild(cv);
-  }
-
-  // size the screen so 40 columns fit the viewport
-  function fit() {
-    const avail = Math.min(window.innerWidth - 24 - 2 * Math.max(12, 0), 1100);
-    const probe = document.createElement('span'); probe.style.cssText = 'font: 100px VT323, monospace; position:absolute; visibility:hidden; white-space:pre'; probe.textContent = '0'.repeat(40); document.body.appendChild(probe);
-    const ratio = probe.getBoundingClientRect().width / 4000; probe.remove();
-    const fs = Math.max(12, Math.min(30, (avail - 0.0) / (40 * ratio + 2.4)));
-    document.documentElement.style.setProperty('--fs', fs.toFixed(2) + 'px');
-    show(current);
-  }
-  document.getElementById('entry').addEventListener('submit', (e) => { e.preventDefault(); const v = +document.getElementById('pg').value; sub = 1; show(v); document.getElementById('pg').value = ''; });
-  (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(fit);
-  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(fit, 150); });
-})();
-</script>
 </body>
 </html>
