@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>06 Riso · Bushfire Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Courier+Prime:wght@400;700&display=swap">
+<link rel="stylesheet" href="shared/leaflet.css">
+<style>
+/* Riso — a two-ink risograph print: blue and fluorescent orange on uncoated paper. Inks multiply where they overlap,
+   headings print slightly out of register, the map's land is a blue halftone, warnings are rubber-stamped. */
+:root {
+  --paper: #f0efe9;
+  --blue: #2f4fa2;     /* Riso Medium Blue */
+  --orange: #ff6c2f;   /* Riso Orange */
+  --ink: #1f2a52;      /* blue at full density, for body text */
+  --ink-2: #56608a;
+  --rule: #b9bdd3;
+  --wide: "Archivo", "Arial Black", sans-serif;
+  --mono: "Courier Prime", "Courier New", monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.5 var(--wide); font-stretch: 100%; position: relative; }
+body::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 5000; opacity: .28; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .44 0 0 0 0 .40 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"); }
+a { color: inherit; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); }
+.wrap { max-width: 1200px; margin: 0 auto; padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); }
+
+/* misregistered two-ink type: orange plate under, blue plate on top, multiplied */
+.ink2 { position: relative; color: var(--blue); isolation: isolate; }
+.ink2::before { content: attr(data-t); position: absolute; left: 0; top: 0; color: var(--orange); transform: translate(3px, 2px); z-index: -1; white-space: inherit; }
+.ink2 > span { mix-blend-mode: multiply; }
+
+header .wrap { padding-block: 22px 0; }
+.issue { display: flex; justify-content: space-between; gap: 8px 20px; flex-wrap: wrap; font-family: var(--mono); font-size: 14px; color: var(--ink-2); border-bottom: 2px solid var(--blue); padding-bottom: 8px; }
+.mrow { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px 28px; flex-wrap: wrap; padding-block: 14px 16px; border-bottom: 6px solid var(--blue); }
+.logo { margin: 0; font-weight: 900; font-stretch: 125%; font-size: clamp(30px, 5.4vw, 64px); line-height: .9; letter-spacing: -.01em; text-transform: uppercase; text-decoration: none; display: block; }
+header nav { display: flex; gap: 4px 18px; flex-wrap: wrap; font-family: var(--mono); font-weight: 700; font-size: 15px; }
+header nav a { text-decoration: none; padding: 3px 0; border-bottom: 3px solid transparent; }
+header nav a:hover { border-color: var(--orange); }
+
+.lead { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px 40px; align-items: end; padding-block: 28px 18px; }
+.lead p { margin: 0; font-size: 19px; line-height: 1.45; max-width: 46ch; font-stretch: 105%; }
+.lead p b { color: var(--orange); mix-blend-mode: multiply; font-weight: 800; }
+.stats { display: grid; grid-template-columns: 1fr 1.25fr 1fr 1.8fr; border-top: 2px solid var(--blue); border-bottom: 2px solid var(--blue); }
+.stat { padding: 14px 16px 12px; }
+.stat + .stat { border-left: 2px dashed var(--rule); }
+.stat .n { font-weight: 900; font-stretch: 125%; font-size: 46px; line-height: 1; display: block; }
+.stat .t { font-family: var(--mono); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); }
+.stat.z .n { color: var(--rule); }
+.stat.z .n::before { display: none; }
+
+.mapbox { margin-top: 26px; position: relative; }
+.mapbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 20px; margin-bottom: 10px; }
+.tabs { display: inline-flex; gap: 0; border: 2px solid var(--blue); }
+.tabs button { border: 0; background: transparent; padding: 6px 14px; font-family: var(--mono); font-weight: 700; cursor: pointer; color: var(--blue); }
+.tabs button[aria-pressed="true"] { background: var(--blue); color: var(--paper); }
+.tg { display: flex; gap: 6px 18px; flex-wrap: wrap; font-family: var(--mono); font-size: 14px; }
+.tg label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.tg input { accent-color: var(--blue); margin: 0; }
+#map { height: 600px; border: 2px solid var(--blue); }
+.mapft { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px 20px; margin-top: 10px; font-family: var(--mono); font-size: 14px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips button { border: 2px solid var(--blue); background: transparent; padding: 3px 10px; font-family: var(--mono); font-weight: 700; cursor: pointer; color: var(--blue); }
+.chips button[aria-pressed="true"] { background: var(--orange); border-color: var(--orange); color: var(--ink); }
+.key { display: flex; gap: 4px 14px; flex-wrap: wrap; align-items: center; color: var(--ink-2); }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+.tfb { margin: 14px 0 0; font-family: var(--mono); font-size: 14px; }
+
+section { margin-top: 70px; }
+h2 { margin: 0; font-weight: 900; font-stretch: 125%; font-size: clamp(34px, 5vw, 58px); line-height: .92; text-transform: uppercase; letter-spacing: -.01em; }
+.shd { display: grid; grid-template-columns: auto 1fr; gap: 10px 32px; align-items: end; margin-bottom: 18px; }
+.shd p { margin: 0; font-family: var(--mono); font-size: 15px; color: var(--ink-2); max-width: 52ch; justify-self: end; text-align: right; }
+.tools { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-bottom: 10px; }
+.tools input { flex: 1 1 260px; min-width: 0; border: 0; border-bottom: 2px solid var(--blue); background: transparent; padding: 6px 2px; font-family: var(--mono); font-size: 16px; }
+
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-family: var(--mono); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); padding: 8px 10px; border-bottom: 2px solid var(--blue); white-space: nowrap; }
+td { padding: 11px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th.r, td.r { text-align: right; }
+.rk { font-weight: 900; font-stretch: 125%; font-size: 30px; line-height: 1; color: var(--orange); mix-blend-mode: multiply; width: 64px; }
+.nm { font-weight: 700; font-size: 17px; line-height: 1.25; font-stretch: 105%; }
+.nm a { text-decoration: none; }
+.nm a:hover { background: linear-gradient(transparent 55%, rgba(255,108,47,.55) 55%); }
+.pl { font-family: var(--mono); font-size: 14px; color: var(--ink-2); }
+.stx { font-family: var(--mono); font-size: 14px; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.stx i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--blue); display: inline-block; }
+.stx.out_of_control i { background: var(--orange); border-color: var(--orange); }
+.stx.being_controlled i { background: linear-gradient(90deg, var(--orange) 50%, transparent 50%); }
+.stamp { display: inline-block; font-family: var(--mono); font-weight: 700; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--orange); border: 2px solid var(--orange); padding: 1px 6px 0; transform: rotate(-3deg); mix-blend-mode: multiply; margin-left: 8px; vertical-align: 2px; }
+.sz { font-weight: 900; font-stretch: 125%; font-size: 20px; }
+.pager { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-top: 14px; font-family: var(--mono); }
+.pager button { border: 2px solid var(--blue); background: transparent; min-width: 36px; padding: 3px 8px; font-weight: 700; cursor: pointer; color: var(--blue); }
+.pager button[aria-current] { background: var(--blue); color: var(--paper); }
+.pager button:disabled { opacity: .35; cursor: default; }
+.pager .of { margin-left: auto; color: var(--ink-2); font-size: 14px; }
+
+.warns { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 0; border-top: 2px solid var(--blue); }
+.w { padding: 16px 16px 16px 0; border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
+.w .stamp { margin: 0 0 6px; font-size: 15px; padding: 2px 8px 1px; justify-self: start; grid-column: 1 / -1; }
+.w b { font-size: 17px; font-stretch: 105%; line-height: 1.25; }
+.w .tm { font-family: var(--mono); font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.w .pl { grid-column: 1 / -1; }
+.more { margin-top: 16px; border: 2px solid var(--blue); background: transparent; color: var(--blue); padding: 7px 14px; font-family: var(--mono); font-weight: 700; cursor: pointer; }
+
+.states { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-top: 2px solid var(--blue); border-left: 2px dashed var(--rule); }
+.sc { display: grid; grid-template-columns: 1fr 90px; gap: 6px 10px; align-items: start; padding: 16px; border-right: 2px dashed var(--rule); border-bottom: 2px dashed var(--rule); text-decoration: none; }
+.sc:hover { background: rgba(255,108,47,.12); }
+.sc .nmx { font-weight: 800; font-stretch: 112%; font-size: 17px; line-height: 1.15; grid-column: 1; }
+.sc .big { font-weight: 900; font-stretch: 125%; font-size: 44px; line-height: .9; color: var(--orange); mix-blend-mode: multiply; }
+.sc .ln { font-family: var(--mono); font-size: 13px; color: var(--ink-2); grid-column: 1 / -1; }
+.sc svg { grid-column: 2; grid-row: 1 / span 2; width: 90px; height: 70px; }
+
+footer { margin-top: 80px; background: var(--blue); color: var(--paper); }
+footer .wrap { padding-block: 30px 90px; display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px 40px; font-family: var(--mono); font-size: 14px; }
+footer p { margin: 0 0 10px; }
+footer strong { color: var(--orange); }
+
+/* leaflet */
+.leaflet-container { background: var(--paper) !important; font-family: var(--mono); }
+.leaflet-hot-pane { mix-blend-mode: multiply; }
+.leaflet-marker-pane { mix-blend-mode: multiply; }
+.leaflet-bar { border: 2px solid var(--blue) !important; border-radius: 0 !important; box-shadow: none !important; }
+.leaflet-bar a { border-radius: 0 !important; color: var(--blue); background: var(--paper); font-family: var(--mono); }
+.leaflet-control-attribution { background: rgba(240,239,233,.85) !important; font-size: 10px; color: var(--ink-2); }
+.leaflet-control-attribution a { color: var(--blue); }
+.st-label { transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; font: 800 12px/1 var(--wide); font-stretch: 125%; letter-spacing: .1em; text-transform: uppercase; color: var(--blue); text-shadow: 0 0 3px var(--paper), 0 0 3px var(--paper), 0 0 4px var(--paper); }
+.mk { line-height: 0; }
+
+@media (max-width: 900px) { .states { grid-template-columns: repeat(2, 1fr); } .lead { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2, 1fr); } .stat:nth-child(3) { border-left: 0; } .stat:nth-child(n+3) { border-top: 2px dashed var(--rule); } footer .wrap { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  #map { height: 440px; }
+  .shd { grid-template-columns: 1fr; }
+  .shd p { justify-self: start; text-align: left; }
+  .stat .n { font-size: 34px; }
+  .states { grid-template-columns: 1fr; }
+  .warns { grid-template-columns: 1fr; }
+  #top thead { display: none; }
+  #top tr { display: grid; grid-template-columns: 48px 1fr auto; column-gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--rule); }
+  #top td { padding: 0; border: 0; }
+  #top td:nth-child(1) { grid-row: span 2; }
+  #top td:nth-child(2) { grid-column: 2; grid-row: 1; }
+  #top td:nth-child(5) { grid-column: 3; grid-row: 1; }
+  #top td:nth-child(4) { grid-column: 2 / -1; grid-row: 2; padding-top: 6px; }
+  #top .col-st, #top .col-upd { display: none; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <pattern id="ht" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(15)"><circle cx="2.5" cy="2.5" r="1.25" fill="#2f4fa2" fill-opacity=".7"/></pattern>
+    <pattern id="ht2" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(15)"><circle cx="2.5" cy="2.5" r=".7" fill="#2f4fa2" fill-opacity=".55"/></pattern>
+    <pattern id="ht3" width="3.4" height="3.4" patternUnits="userSpaceOnUse" patternTransform="rotate(15)"><circle cx="1.7" cy="1.7" r=".95" fill="#2f4fa2" fill-opacity=".8"/></pattern>
+  </defs>
+</svg>
+<header>
+  <div class="wrap">
+    <div class="issue"><span id="issue"></span><span>Live fires · warnings · satellite hotspots</span></div>
+    <div class="mrow">
+      <a href="#" class="logo ink2" data-t="Bushfire Explorer"><span>Bushfire Explorer</span></a>
+      <nav aria-label="Primary"><a href="#top">Top fires</a><a href="#states">By state</a><a href="#">Near me</a><a href="#">Sources</a></nav>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="lead">
+    <p id="summary"></p>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div class="mapbox">
+    <div class="mapbar">
+      <div class="tabs" role="group" aria-label="Map overlay"><button type="button" id="ov-hot" aria-pressed="true">Hotspots</button><button type="button" id="ov-fdr" aria-pressed="false">Fire danger</button></div>
+      <div class="tg"><label><input type="checkbox" checked> Perimeters</label><label><input type="checkbox" checked> Warning areas</label><label><input type="checkbox"> Satellite</label></div>
+    </div>
+    <div id="map" role="region" aria-label="Map of fires in Australia"></div>
+    <div class="mapft"><div class="chips" id="chips"></div><div class="key" id="key"></div></div>
+    <p class="tfb">Total Fire Ban today: none declared. Tasmania and Northern Territory: check the state agency.</p>
+  </div>
+
+  <section id="top" aria-labelledby="h-top">
+    <div class="shd"><h2 class="ink2" data-t="Top fires" id="h-top"><span>Top fires</span></h2><p>The largest fires burning in Australia, ranked by known size. New fires often have no size yet.</p></div>
+    <div class="tools"><label for="q" style="position:absolute;left:-9999px">Search</label><input id="q" type="search" placeholder="Search fires, towns or councils"><div class="chips"><button type="button" aria-pressed="false">All</button><button type="button" aria-pressed="true">Bushfires</button><button type="button" aria-pressed="false">Planned</button></div></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>Fire</th><th class="col-st">State</th><th>Status</th><th class="r">Size ha</th><th class="r col-upd">Updated</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <div class="pager" id="pager"></div>
+  </section>
+
+  <section aria-labelledby="h-warn">
+    <div class="shd"><h2 class="ink2" data-t="Warnings" id="h-warn"><span>Warnings</span></h2><p>Australian Warning System alerts issued by fire agencies, highest level first.</p></div>
+    <div class="warns" id="warns"></div>
+    <button type="button" class="more" id="more"></button>
+  </section>
+
+  <section id="states" aria-labelledby="h-st">
+    <div class="shd"><h2 class="ink2" data-t="By state" id="h-st"><span>By state</span></h2><p>State pages list each agency’s incidents and today’s fire danger by district.</p></div>
+    <div class="states" id="sts"></div>
+  </section>
+</main>
+
+<footer><div class="wrap">
+  <div><p><strong>For information only.</strong> Bushfire Explorer does not replace official sources. Always follow advice from your state fire agency and emergency broadcaster. In an emergency call 000.</p></div>
+  <div><p>Printed live from NSW RFS, VicEmergency, QFD, SA CFS, DFES, TFS, ACT ESA, Geoscience Australia, BoM via Esri, NAFI, Open-Meteo.</p></div>
+</div></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="shared/geo.js"></script>
+<script src="shared/data.js"></script>
+<script src="shared/danger.js"></script>
+<script src="shared/kit.js"></script>
+<script src="shared/nav.js"></script>
+<script>
+(function () {
+  const { esc, ha, num, ago } = K;
+  const B = '#2f4fa2', O = '#ff6c2f';
+  const doy = Math.round((new Date(K.snapISODate) - new Date(K.snapISODate.slice(0, 4) + '-01-01')) / 864e5) + 1;
+  document.getElementById('issue').textContent = `No. ${doy} · ${K.snapDate} · ${K.snapTime} AEDT`;
+  const c = K.counts;
+  const top = K.byState.slice().sort((a, b) => b.active - a.active);
+  document.getElementById('summary').innerHTML = `<b>${c.active} fires</b> are burning across Australia this morning, most of them in ${top[0].name} (${top[0].active}) and ${top[1].name} (${top[1].active}). Fire agencies have issued <b>${c.advice} Advice warnings</b>. There are no Watch and Act or Emergency Warnings.`;
+  const st = (n, t) => `<div class="stat${n === 0 ? ' z' : ''}"><span class="n num ink2" data-t="${num(n)}"><span>${num(n)}</span></span><span class="t">${t}</span></div>`;
+  document.getElementById('stats').innerHTML = st(c.emergency, 'Emergency') + st(c.watch, 'Watch and Act') + st(c.advice, 'Advice') + st(c.hotspots, 'Hotspots 24 h');
+
+  const tri = (s = 16) => `<svg width="${s}" height="${Math.round(s * .9)}" viewBox="0 0 20 18" aria-hidden="true" style="overflow:visible"><path d="M11.5 2.5 19.5 17h-16Z" fill="${O}"/><path d="M10 1 18 15.5H2Z" fill="none" stroke="${B}" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+  const dot = (f, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 14 14" aria-hidden="true" style="overflow:visible"><circle cx="8" cy="8" r="4.6" fill="${f.status === 'under_control' ? 'none' : O}"/><circle cx="6.6" cy="6.6" r="4.6" fill="none" stroke="${B}" stroke-width="1.6"/></svg>`;
+  const map = K.map(document.getElementById('map'), {
+    sea: '#f0efe9',
+    neighbour: { color: B, weight: .7, opacity: .6, fillColor: 'url(#ht2)', fillOpacity: 1 },
+    state: { color: B, weight: 1.1, fillColor: 'url(#ht)', fillOpacity: 1 },
+    danger: (p) => ({ stroke: false, fillColor: p.rating === 'High' ? 'url(#ht3)' : p.rating === 'Extreme' || p.rating === 'Catastrophic' ? O : '#f0efe9', fillOpacity: p.rating === 'No Rating' ? 0 : (p.rating === 'Moderate' ? .55 : 1) }),
+    hot: (h) => h.ageH < 3 ? { radius: 3, stroke: false, fillColor: O, fillOpacity: 1 } : { radius: 2.2, stroke: false, fillColor: O, fillOpacity: .75 },
+    labels: (s) => s === 'ACT' ? null : `<span>${K.STATE_NAME[s]}</span>`,
+    fireIcon: (f) => f.alert ? L.divIcon({ className: 'mk', html: tri(22), iconSize: [22, 20], iconAnchor: [11, 12] }) : L.divIcon({ className: 'mk', html: dot(f), iconSize: [14, 14] }),
+  });
+  const hb = document.getElementById('ov-hot'), fb = document.getElementById('ov-fdr');
+  const ov = (fdr) => { hb.setAttribute('aria-pressed', !fdr); fb.setAttribute('aria-pressed', fdr); if (fdr) { map.removeLayer(map.layers.hot); map.layers.danger.addTo(map); } else { map.removeLayer(map.layers.danger); map.layers.hot.addTo(map); }
+    document.getElementById('key').innerHTML = fdr ? '<span><svg width="16" height="10"><rect width="16" height="10" fill="url(#ht2)"/></svg>Moderate</span><span><svg width="16" height="10"><rect width="16" height="10" fill="url(#ht3)"/></svg>High</span><span><svg width="16" height="10"><rect width="16" height="10" fill="#ff6c2f"/></svg>Extreme and above</span>' : keyHot; };
+  hb.onclick = () => ov(false); fb.onclick = () => ov(true);
+  document.getElementById('chips').innerHTML = `<button type="button" aria-pressed="true">${c.active} active</button><button type="button" aria-pressed="false">${c.controlled} under control</button><button type="button" aria-pressed="false">${c.planned} planned</button>`;
+  const keyHot = `<span>${tri(15)}Advice</span><span>${dot({ status: 'out_of_control' }, 13)}Fire</span><span><svg width="8" height="8"><circle cx="4" cy="4" r="3" fill="#ff6c2f"/></svg>Hotspot, 24 h</span>`;
+  document.getElementById('key').innerHTML = keyHot;
+
+  const PER = 15;
+  function page(p) {
+    const list = K.ranked, pages = Math.ceil(list.length / PER);
+    document.getElementById('rows').innerHTML = list.slice((p - 1) * PER, p * PER).map((f) => `<tr>
+      <td class="rk num">${f.rank}</td>
+      <td><div class="nm"><a href="#">${esc(f.name)}</a>${f.alert ? '<span class="stamp">Advice</span>' : ''}</div><div class="pl">${esc(f.place)}</div></td>
+      <td class="col-st mono"><b>${f.state}</b></td>
+      <td><span class="stx ${f.status}"><i aria-hidden="true"></i>${esc(f.agencyStatus)}</span></td>
+      <td class="r sz num">${f.sizeHa != null ? ha(f.sizeHa) : '<span style="color:var(--rule)">—</span>'}</td>
+      <td class="r pl col-upd">${ago(f.updated)}</td></tr>`).join('');
+    let h = `<button type="button" data-p="${p - 1}" ${p === 1 ? 'disabled' : ''}>‹</button>`;
+    for (let i = 1; i <= pages; i++) h += `<button type="button" data-p="${i}" ${i === p ? 'aria-current="page"' : ''}>${i}</button>`;
+    h += `<button type="button" data-p="${p + 1}" ${p === pages ? 'disabled' : ''}>›</button><span class="of">page ${p} of ${pages}</span>`;
+    const el = document.getElementById('pager'); el.innerHTML = h; el.querySelectorAll('[data-p]').forEach((x) => x.onclick = () => page(+x.dataset.p));
+  }
+  page(1);
+
+  let all = false;
+  function warns() {
+    document.getElementById('warns').innerHTML = (all ? K.warnings : K.warnings.slice(0, 6)).map((w, i) => `<article class="w"><span class="stamp" style="transform:rotate(${[-3, 2, -1.5, 3, -2.5, 1][i % 6]}deg)">${K.ALERT_LABEL[w.alert]}</span><b>${esc(w.title)}</b><span class="tm">${ago(w.updated)}</span><span class="pl">${w.state} · ${esc(w.place)}</span></article>`).join('');
+    document.getElementById('more').textContent = all ? 'Show fewer' : `Show all ${K.warnings.length} warnings`;
+  }
+  document.getElementById('more').onclick = () => { all = !all; warns(); };
+  warns();
+
+  document.getElementById('sts').innerHTML = K.byState.map((s) => {
+    const f = K.stateFeature(s.code), bb = K.bbox(f.geometry), P = K.projector(bb, 90, 3);
+    const sc = Math.min(1, 70 / P.h), tx = (90 - 90 * sc) / 2, ty = (70 - P.h * sc) / 2;
+    const dots = s.fires.map((x) => { const [px, py] = P.xy(x.lon, x.lat); return `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${2.2 / sc}" fill="#ff6c2f"/>`; }).join('');
+    return `<a href="#" class="sc"><span class="nmx">${s.name}</span><span class="big num">${s.noFeed ? '–' : s.active}</span>
+      <svg viewBox="0 0 90 70" aria-hidden="true"><g transform="translate(${tx} ${ty}) scale(${sc})"><path d="${P.path(f.geometry)}" fill="#2f4fa2" fill-opacity=".22" stroke="#2f4fa2" stroke-width="${1.2 / sc}"/><g style="mix-blend-mode:multiply">${dots}</g></g></svg>
+      <span class="ln">${s.noFeed ? 'No incident feed · ' + num(s.hotspots) + ' hotspots' : `${s.warnings} warning${s.warnings === 1 ? '' : 's'} · ${num(s.hotspots)} hotspots${s.danger ? ' · ' + s.danger + ' danger' : ''}`}</span></a>`;
+  }).join('');
+})();
+</script>
+</body>
+</html>
