@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>09 Departures · Bushfire Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="shared/leaflet.css">
+<style>
+/* Departures — the ranked fire list is a split-flap board: one flap per character, status in coloured text, warnings
+   as a yellow flap. Flaps settle once on load. Wayfinding-style header with a pictogram and a flap clock. Dark only. */
+:root {
+  --bg: #0e0f11;
+  --board: #17191c;
+  --flap-t: #2a2d31;
+  --flap-b: #222528;
+  --seam: #0a0b0c;
+  --char: #f2efe6;
+  --amber: #f2b200;   /* signage yellow */
+  --out: #ff6b4a;
+  --ctl: #f2b200;
+  --done: #7fc97f;
+  --ink-2: #9a9ea6;
+  --rule: #2b2e33;
+  --flap: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --text: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--char); font: 400 16px/1.5 var(--text); }
+a { color: inherit; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); }
+
+/* flaps */
+.cells { display: inline-flex; gap: 2px; }
+.c { position: relative; display: inline-grid; place-items: center; width: .82em; height: 1.36em; font: 600 1em/1 var(--flap); text-transform: uppercase; color: var(--char);
+  background: linear-gradient(var(--flap-t) 0 50%, var(--flap-b) 50% 100%); border-radius: 2px; }
+.c::after { content: ""; position: absolute; left: 0; right: 0; top: calc(50% - .5px); height: 1px; background: var(--seam); }
+.c.out { color: var(--out); } .c.ctl { color: var(--ctl); } .c.done { color: var(--done); }
+.c.adv { background: linear-gradient(#ffd400 0 50%, #f2c600 50% 100%); color: #111; }
+.c.dim { color: #5d6168; }
+.c.light { color: transparent; }
+.c.light.out::before, .c.light.ctl::before, .c.light.done::before { content: ""; width: .42em; height: .42em; border-radius: 50%; background: currentColor; }
+.c.light.out::before { background: var(--out); } .c.light.ctl::before { background: var(--ctl); } .c.light.done::before { background: var(--done); }
+.c.rt-High { background: #ffe000; color: #111; } .c.rt-Moderate { background: #64bf30; color: #111; } .c.rt-Extreme { background: #ff6d00; color: #111; }
+
+/* signage header */
+.sign { background: #000; border-bottom: 1px solid var(--rule); }
+.sign .wrap { display: flex; align-items: center; justify-content: space-between; gap: 14px 24px; flex-wrap: wrap; padding-block: 14px; }
+.wayf { display: flex; align-items: center; gap: 16px; text-decoration: none; }
+.picto { width: 56px; height: 56px; background: var(--amber); border-radius: 6px; display: grid; place-items: center; flex: none; }
+.wayf b { display: block; font: 700 34px/1 var(--flap); letter-spacing: .01em; }
+.wayf small { display: block; font: 500 15px/1.2 var(--text); color: var(--ink-2); margin-top: 3px; }
+.clock { display: flex; align-items: center; gap: 12px; font-size: 30px; }
+.clock small { font: 500 13px/1.25 var(--text); color: var(--ink-2); text-align: right; }
+nav.sub { background: var(--board); border-bottom: 1px solid var(--rule); }
+nav.sub .wrap { display: flex; gap: 2px 26px; flex-wrap: wrap; }
+nav.sub a { text-decoration: none; padding: 10px 0; font: 600 15px/1 var(--flap); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); border-bottom: 2px solid transparent; }
+nav.sub a[aria-current], nav.sub a:hover { color: var(--amber); border-bottom-color: var(--amber); }
+
+/* counters */
+.counters { display: flex; flex-wrap: wrap; gap: 14px 30px; padding-block: 22px 18px; }
+.ctr { display: flex; flex-direction: column; gap: 6px; }
+.ctr .lbl { font: 600 13px/1 var(--flap); letter-spacing: .14em; text-transform: uppercase; color: var(--amber); }
+.ctr .cells { font-size: 30px; }
+.ctr.note { margin-left: auto; align-self: flex-end; max-width: 30ch; font-size: 14px; color: var(--ink-2); }
+
+/* the board */
+.board { background: var(--board); border-radius: 8px; padding: 14px 16px 10px; border: 1px solid var(--rule); }
+.bhd { display: flex; justify-content: space-between; align-items: center; gap: 10px 20px; flex-wrap: wrap; margin-bottom: 10px; }
+.bhd h1, .bhd h2 { margin: 0; font: 700 26px/1 var(--flap); letter-spacing: .04em; text-transform: uppercase; }
+.bhd p { margin: 0; font-size: 14px; color: var(--ink-2); }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.filters button { border: 1px solid var(--rule); background: transparent; color: var(--ink-2); border-radius: 4px; padding: 5px 10px; font: 600 14px/1 var(--flap); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.filters button[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: #111; }
+.colhd, .row { display: grid; gap: 12px; align-items: center; }
+.colhd { font: 600 12px/1 var(--flap); letter-spacing: .16em; text-transform: uppercase; color: var(--amber); padding: 0 6px 8px; border-bottom: 1px solid var(--rule); }
+.rows { font-size: 20px; }
+.row { padding: 5px 6px; text-decoration: none; border-bottom: 1px solid #1f2225; }
+.row:hover { background: #1e2125; }
+.row .r { justify-self: end; }
+.bft { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; font-size: 14px; color: var(--ink-2); }
+.pager { display: flex; gap: 4px; }
+.pager button { border: 0; background: linear-gradient(var(--flap-t) 0 50%, var(--flap-b) 50% 100%); color: var(--char); min-width: 34px; padding: 6px 8px; border-radius: 3px; font: 600 16px/1 var(--flap); cursor: pointer; }
+.pager button[aria-current] { color: #111; background: var(--amber); }
+.pager button:disabled { color: #4a4d52; cursor: default; }
+
+.split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; margin-top: 18px; }
+.mapcard { background: var(--board); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+.mapcard .bhd { padding: 12px 14px 0; }
+.seg { display: inline-flex; gap: 4px; }
+.seg button { border: 1px solid var(--rule); background: transparent; color: var(--ink-2); border-radius: 4px; padding: 5px 10px; font: 600 14px/1 var(--flap); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--char); color: #111; border-color: var(--char); }
+#map { flex: 1; min-height: 460px; margin-top: 10px; }
+.mapkey { display: flex; gap: 4px 16px; flex-wrap: wrap; padding: 10px 14px; font-size: 13px; color: var(--ink-2); border-top: 1px solid var(--rule); }
+.mapkey span { display: inline-flex; gap: 6px; align-items: center; }
+.small .rows { font-size: 16px; }
+.more { margin-top: 8px; border: 1px solid var(--rule); background: transparent; color: var(--char); border-radius: 4px; padding: 7px 12px; font: 600 14px/1 var(--flap); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.tfb { font-size: 14px; color: var(--ink-2); margin: 14px 0 0; }
+.tfb b { color: var(--char); font-weight: 600; }
+
+footer { margin-top: 56px; border-top: 1px solid var(--rule); background: #000; }
+footer .wrap { padding-block: 22px 90px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px 40px; font-size: 14px; color: var(--ink-2); }
+footer p { margin: 0; }
+footer b { color: var(--char); }
+
+.leaflet-container { background: #0e0f11 !important; font-family: var(--text); }
+.leaflet-bar { border: 1px solid var(--rule) !important; box-shadow: none !important; }
+.leaflet-bar a { background: var(--flap-t) !important; color: var(--char) !important; border-color: var(--rule) !important; }
+.leaflet-control-attribution { background: rgba(14,15,17,.8) !important; color: #777; font-size: 10px; }
+.leaflet-control-attribution a { color: #999; }
+.st-label { transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; font: 600 12px/1 var(--flap); letter-spacing: .2em; text-transform: uppercase; color: #5e636b; }
+.mk { line-height: 0; }
+
+@media (prefers-reduced-motion: reduce) { .c { transition: none; } }
+@media (max-width: 980px) { .split { grid-template-columns: 1fr; } footer .wrap { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .wayf b { font-size: 26px; }
+  .picto { width: 44px; height: 44px; }
+  .clock { font-size: 22px; }
+  .ctr .cells { font-size: 22px; }
+  .ctr.note { margin-left: 0; }
+  .rows { font-size: 16px; }
+  .board { padding: 12px 10px 8px; }
+  #map { min-height: 380px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="sign"><div class="wrap">
+    <a class="wayf" href="#"><span class="picto" aria-hidden="true"><svg width="30" height="34" viewBox="0 0 26 30"><path d="M13 1c-1.6 5-8 8-8 16a8 8 0 0 0 16 0c0-3.6-1.8-6.2-3.6-8 0 2.7-1.3 4.4-3 4.9C15.5 10 14.6 5.4 13 1z" fill="#000"/></svg></span><span><b>Bushfire Explorer</b><small>Active fires · Australia</small></span></a>
+    <div class="clock"><small id="clockd"></small><span class="cells" id="clock" aria-hidden="true"></span></div>
+  </div></div>
+  <nav class="sub" aria-label="Primary"><div class="wrap"><a href="#" aria-current="page">Fires</a><a href="#warnings">Warnings</a><a href="#regions">States</a><a href="#">Near me</a><a href="#">Sources</a></div></nav>
+</header>
+
+<main class="wrap">
+  <div class="counters" id="counters"></div>
+
+  <section class="board" aria-labelledby="h-board">
+    <div class="bhd"><h1 id="h-board">Active fires</h1><div class="filters" role="group" aria-label="Show"><button type="button" aria-pressed="true">Bushfires</button><button type="button" aria-pressed="false">Planned</button><button type="button" aria-pressed="false">Under control</button><button type="button" aria-pressed="false">All</button></div></div>
+    <div class="colhd" id="colhd"></div>
+    <div class="rows" id="rows"></div>
+    <div class="bft"><span id="bpage"></span><div class="pager" id="pager"></div></div>
+  </section>
+
+  <div class="split">
+    <section class="mapcard" aria-labelledby="h-map">
+      <div class="bhd"><h2 id="h-map">Map</h2><div class="seg" role="group" aria-label="Map overlay"><button type="button" id="ov-hot" aria-pressed="true">Hotspots</button><button type="button" id="ov-fdr" aria-pressed="false">Fire danger</button></div></div>
+      <div id="map" role="region" aria-label="Map of fires in Australia"></div>
+      <div class="mapkey" id="mapkey"></div>
+    </section>
+    <section class="board small" id="warnings" aria-labelledby="h-w">
+      <div class="bhd"><h2 id="h-w">Warnings</h2><p>Highest level first</p></div>
+      <div class="colhd" id="wcol"></div>
+      <div class="rows" id="wrows"></div>
+      <button type="button" class="more" id="more"></button>
+      <p class="tfb"><b>Total Fire Ban:</b> none today. TAS, NT: check agency.</p>
+    </section>
+  </div>
+
+  <section class="board small" id="regions" aria-labelledby="h-r" style="margin-top:18px">
+    <div class="bhd"><h2 id="h-r">States</h2><p>Highest fire danger rating today is shown on the right.</p></div>
+    <div class="colhd" id="rcol"></div>
+    <div class="rows" id="rrows"></div>
+  </section>
+</main>
+
+<footer><div class="wrap">
+  <p><b>For information only.</b> Bushfire Explorer compiles official feeds automatically; they may be delayed or incomplete. Follow advice from your state fire agency and emergency broadcaster. In an emergency call 000.</p>
+  <p>NSW RFS · VicEmergency · QFD · SA CFS · DFES · TFS · ACT ESA · Geoscience Australia · BoM via Esri · NAFI · Open-Meteo</p>
+</div></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="shared/geo.js"></script>
+<script src="shared/data.js"></script>
+<script src="shared/danger.js"></script>
+<script src="shared/kit.js"></script>
+<script src="shared/nav.js"></script>
+<script>
+(function () {
+  const { esc, ha, num, ago } = K;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const CLS = { out_of_control: 'out', being_controlled: 'ctl', under_control: 'done', unknown: 'dim' };
+  const norm = (s) => String(s || '').normalize('NFKD').replace(/[–—]/g, '-').replace(/[^A-Za-z0-9 \-.,/&()':]/g, '').toUpperCase();
+  // n flap cells holding text (left- or right-aligned), with an optional class on every cell
+  const cells = (text, n, cls, right) => { let t = norm(text).slice(0, n); t = right ? t.padStart(n) : t.padEnd(n); const solid = /^rt-/.test(cls || ''); return `<span class="cells" aria-hidden="true">${[...t].map((ch) => `<span class="c ${solid && ch === ' ' ? '' : (cls || '')}" data-t="${ch === ' ' ? '' : esc(ch)}">${ch === ' ' ? '' : esc(ch)}</span>`).join('')}</span>`; };
+  const hhmm = (iso) => new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+  const W = () => window.innerWidth;
+  const layout = () => W() < 640 ? 'm' : W() < 1100 ? 't' : 'd';
+
+  document.getElementById('clock').innerHTML = cells(hhmm(K.S.at), 5);
+  document.getElementById('clockd').innerHTML = `AEDT<br>${K.snapDate.replace(/ \d{4}$/, '')}`;
+  const c = K.counts;
+  const ctr = (l, n, w) => `<div class="ctr"><span class="lbl">${l}</span>${cells(String(n).padStart(w, '0'), w, n ? '' : 'dim', true)}</div>`;
+  document.getElementById('counters').innerHTML = ctr('Emergency', c.emergency, 2) + ctr('Watch and Act', c.watch, 2) + ctr('Advice', c.advice, 2) + ctr('Active fires', c.active, 3) + ctr('Hotspots 24 h', c.hotspots, 5) +
+    `<p class="ctr note">Live from state fire agencies. Updated ${K.snapTime} AEDT; feeds refresh every 1 to 5 minutes.</p>`;
+
+  // main board
+  const PER = 15;
+  let pageNo = 1;
+  function board() {
+    const L0 = layout(), list = K.ranked, pages = Math.ceil(list.length / PER);
+    const spec = L0 === 'd' ? { cols: '5.4em 21em 2.9em 13.4em 4.8em 1fr', hd: ['Updated', 'Fire', 'St', 'Status', 'Ha', 'Remarks'] }
+      : L0 === 't' ? { cols: '5.4em 17em 2.9em 10.8em 1fr', hd: ['Updated', 'Fire', 'St', 'Status', 'Ha'] }
+      : { cols: '0.9em 12.2em 1fr', hd: ['', 'Fire', 'St'] };
+    document.getElementById('colhd').style.gridTemplateColumns = spec.cols;
+    document.getElementById('colhd').style.fontSize = getComputedStyle(document.getElementById('rows')).fontSize;
+    document.getElementById('colhd').innerHTML = spec.hd.map((h, i) => `<span style="font-size:12px${h === 'Ha' ? ';justify-self:end' : ''}">${h}</span>`).join('');
+    document.getElementById('rows').innerHTML = list.slice((pageNo - 1) * PER, pageNo * PER).map((f) => {
+      const st = CLS[f.status] || 'dim', name = K.shortName(f), size = f.sizeHa != null ? ha(f.sizeHa) : '';
+      const label = `${f.name}, ${K.STATE_NAME[f.state]}, ${f.agencyStatus}${f.sizeHa != null ? ', ' + ha(f.sizeHa) + ' hectares' : ''}${f.alert ? ', Advice warning' : ''}`;
+      const inner = L0 === 'd' ? cells(hhmm(f.updated), 5) + cells(name, 24) + cells(f.state, 3) + cells(f.agencyStatus, 16, st) + `<span class="r">${cells(size, 5, '', true)}</span>` + (f.alert ? cells('Advice', 6, 'adv') : '<span></span>')
+        : L0 === 't' ? cells(hhmm(f.updated), 5) + cells(name, 20) + cells(f.state, 3) + cells(f.agencyStatus, 13, st) + `<span class="r">${cells(size, 5, '', true)}</span>`
+        : `<span class="cells" aria-hidden="true"><span class="c light ${f.alert ? 'adv' : st}" data-t=""></span></span>` + cells(name, 14) + cells(f.state, 3);
+      return `<a href="#" class="row" style="grid-template-columns:${spec.cols}" aria-label="${esc(label)}">${inner}</a>`;
+    }).join('');
+    document.getElementById('bpage').textContent = `Board ${pageNo} of ${pages} · ${list.length} active fires · ranked by known size`;
+    let h = `<button type="button" data-p="${pageNo - 1}" ${pageNo === 1 ? 'disabled' : ''} aria-label="Previous">‹</button>`;
+    for (let i = 1; i <= pages; i++) h += `<button type="button" data-p="${i}" ${i === pageNo ? 'aria-current="page"' : ''}>${i}</button>`;
+    h += `<button type="button" data-p="${pageNo + 1}" ${pageNo === pages ? 'disabled' : ''} aria-label="Next">›</button>`;
+    const el = document.getElementById('pager'); el.innerHTML = h; el.querySelectorAll('[data-p]').forEach((x) => x.onclick = () => { pageNo = +x.dataset.p; board(); flip(document.getElementById('rows')); });
+  }
+
+  let showAll = false;
+  function warnings() {
+    const m = layout() === 'm', cols = m ? '9.4em 1fr' : '3.4em 15.6em 1fr';
+    document.getElementById('wcol').style.gridTemplateColumns = cols;
+    document.getElementById('wcol').style.fontSize = '16px';
+    document.getElementById('wcol').innerHTML = (m ? ['Warning', 'Level'] : ['St', 'Warning', 'Level']).map((h) => `<span style="font-size:12px">${h}</span>`).join('');
+    document.getElementById('wrows').innerHTML = (showAll ? K.warnings : K.warnings.slice(0, 8)).map((w) => `<a href="#" class="row" style="grid-template-columns:${cols}" aria-label="${esc(w.title + ', ' + w.state + ', ' + K.ALERT_LABEL[w.alert])}">${m ? '' : cells(w.state, 3)}${cells(K.shortName({ name: w.title }), m ? 11 : 19)}${cells('Advice', 6, 'adv')}</a>`).join('');
+    document.getElementById('more').textContent = showAll ? 'Show fewer' : `Show all ${K.warnings.length}`;
+  }
+  document.getElementById('more').onclick = () => { showAll = !showAll; warnings(); flip(document.getElementById('wrows')); };
+
+  function regions() {
+    const m = layout() === 'm', cols = m ? '3.6em 3.6em 1fr' : '17em 3.6em 2.6em 5.4em 1fr';
+    document.getElementById('rcol').style.gridTemplateColumns = cols;
+    document.getElementById('rcol').style.fontSize = '16px';
+    document.getElementById('rcol').innerHTML = (m ? ['State', 'Fires', 'Danger'] : ['State', 'Fires', 'Wrn', 'Hotspots', 'Danger today']).map((h) => `<span style="font-size:12px">${h}</span>`).join('');
+    document.getElementById('rrows').innerHTML = K.byState.map((s) => `<a href="#" class="row" style="grid-template-columns:${cols}" aria-label="${esc(s.name + ', ' + (s.noFeed ? 'no incident feed' : s.active + ' active fires') + ', ' + (s.danger || '') + ' fire danger')}">${cells(m ? s.code : s.name, m ? 3 : 19)}${cells(s.noFeed ? '--' : String(s.active), 3, s.noFeed ? 'dim' : '', true)}${m ? '' : cells(String(s.warnings), 2, s.warnings ? '' : 'dim', true) + cells(String(s.hotspots), 5, '', true)}${cells(s.danger || '', m ? 8 : 9, 'rt-' + s.danger)}</a>`).join('');
+  }
+
+  // flap animation: every cell cycles through characters and settles, staggered left to right
+  const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  function flip(root) {
+    if (reduce) return;
+    const els = [...root.querySelectorAll('.c')].filter((e) => e.dataset.t);
+    const stops = els.map((e, i) => 4 + Math.floor(Math.random() * 6) + ((e.parentNode && [...e.parentNode.children].indexOf(e)) || 0) * .7);
+    let tick = 0;
+    const id = setInterval(() => {
+      tick++; let live = 0;
+      els.forEach((e, i) => { if (tick < stops[i]) { e.textContent = CHARS[(Math.random() * CHARS.length) | 0]; live++; } else if (e.textContent !== e.dataset.t) e.textContent = e.dataset.t; });
+      if (!live) clearInterval(id);
+    }, 45);
+  }
+  function renderAll(animate) { board(); warnings(); regions(); if (animate) { flip(document.getElementById('rows')); flip(document.getElementById('counters')); } }
+  renderAll(true);
+  let lastL = layout(), rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (layout() !== lastL) { lastL = layout(); renderAll(false); } }, 200); });
+
+  // map
+  const tri = (s) => `<svg width="${s}" height="${Math.round(s * .88)}" viewBox="0 0 16 14"><path d="M8 1 15 13H1Z" fill="#ffd400" stroke="#0e0f11" stroke-width="1.3" stroke-linejoin="round"/></svg>`;
+  const map = K.map(document.getElementById('map'), {
+    sea: '#0e0f11',
+    neighbour: { color: '#2b2e33', weight: .6, fillColor: '#16181b', fillOpacity: 1 },
+    state: { color: '#3c4148', weight: .9, fillColor: '#1e2125', fillOpacity: 1 },
+    danger: (p) => ({ color: '#0e0f11', weight: .5, fillColor: K.RATING_COLOR[p.rating], fillOpacity: p.rating === 'No Rating' ? 0 : .55 }),
+    hot: (h) => ({ radius: h.ageH < 3 ? 2.3 : 1.6, stroke: false, fillColor: h.ageH < 3 ? '#ff6b4a' : '#f2b200', fillOpacity: h.ageH < 3 ? .95 : .55 }),
+    labels: (s) => s === 'ACT' ? null : `<span>${K.STATE_NAME[s]}</span>`,
+    fireIcon: (f) => L.divIcon({ className: 'mk', html: f.alert ? tri(18) : `<svg width="9" height="9"><rect x=".5" y=".5" width="8" height="8" fill="${f.status === 'out_of_control' ? '#ff6b4a' : f.status === 'being_controlled' ? '#f2b200' : '#7fc97f'}" stroke="#0e0f11"/></svg>`, iconSize: f.alert ? [18, 16] : [9, 9] }),
+  });
+  const hb = document.getElementById('ov-hot'), fb = document.getElementById('ov-fdr');
+  const ov = (fdr) => { hb.setAttribute('aria-pressed', !fdr); fb.setAttribute('aria-pressed', fdr); if (fdr) { map.removeLayer(map.layers.hot); map.layers.danger.addTo(map); } else { map.removeLayer(map.layers.danger); map.layers.hot.addTo(map); } };
+  hb.onclick = () => ov(false); fb.onclick = () => ov(true);
+  document.getElementById('mapkey').innerHTML = `<span>${tri(14)}Advice</span><span><svg width="9" height="9"><rect width="9" height="9" fill="#ff6b4a"/></svg>Out of control</span><span><svg width="9" height="9"><rect width="9" height="9" fill="#f2b200"/></svg>Being controlled</span><span><svg width="8" height="8"><circle cx="4" cy="4" r="2.6" fill="#ff6b4a"/></svg>Hotspot &lt; 3 h</span><span><svg width="8" height="8"><circle cx="4" cy="4" r="2" fill="#f2b200" fill-opacity=".7"/></svg>&lt; 24 h</span>`;
+})();
+</script>
+</body>
+</html>
