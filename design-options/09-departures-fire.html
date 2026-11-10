@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>09 Departures · Cloncurry fire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="shared/leaflet.css">
+<link rel="stylesheet" href="styles/09-departures.css">
+<style>
+.crumb { margin: 18px 0 12px; font: 600 14px/1 var(--flap); letter-spacing: .14em; text-transform: uppercase; }
+.crumb a { color: var(--amber); text-decoration: none; }
+.hero { font-size: clamp(26px, 4.6vw, 52px); }
+.hero .cells { flex-wrap: wrap; }
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 18px; margin-top: 16px; }
+.fact .lbl { display: block; font: 600 12px/1 var(--flap); letter-spacing: .16em; text-transform: uppercase; color: var(--amber); margin-bottom: 6px; }
+.fact .cells { font-size: 22px; }
+.fact small { display: block; color: var(--ink-2); font-size: 13px; margin-top: 4px; }
+.led { background: #0a0a09; border: 1px solid var(--rule); border-radius: 8px; padding: 18px 20px; margin-top: 18px; color: #ffb000; }
+.led .hd { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; border-bottom: 1px solid #3a2a00; padding-bottom: 10px; margin-bottom: 4px; }
+.led .hd .c { font-size: 18px; }
+.led .hl { font: 600 18px/1.3 var(--flap); letter-spacing: .04em; text-transform: uppercase; color: #ffd27a; }
+.led .bd { columns: 2 320px; column-gap: 34px; column-rule: 1px solid #3a2a00; font-size: 16px; color: #f5c86a; }
+.led h3 { margin: 14px 0 4px; font: 700 15px/1.2 var(--flap); letter-spacing: .14em; text-transform: uppercase; color: #ffb000; break-after: avoid; }
+.led p { margin: 6px 0; }
+.led ul { margin: 4px 0 8px; padding-left: 18px; }
+.led li { margin: 4px 0; break-inside: avoid; }
+.led li::marker { color: #ffb000; }
+.led .ft { border-top: 1px solid #3a2a00; margin-top: 8px; padding-top: 10px; font-size: 13px; color: #a88a4a; }
+#fmap { min-height: 480px; }
+#fmap .base-relief { filter: invert(1) grayscale(1) brightness(.75) contrast(1.2); }
+#fmap .base-labels { filter: invert(1) brightness(1.4); opacity: .7; }
+@media (max-width: 900px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .fact .cells { font-size: 14px; } .hero { font-size: 24px; } .led { padding: 14px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="sign"><div class="wrap">
+    <a class="wayf" href="09-departures.html"><span class="picto" aria-hidden="true"><svg width="30" height="34" viewBox="0 0 26 30"><path d="M13 1c-1.6 5-8 8-8 16a8 8 0 0 0 16 0c0-3.6-1.8-6.2-3.6-8 0 2.7-1.3 4.4-3 4.9C15.5 10 14.6 5.4 13 1z" fill="#000"/></svg></span><span><b>Bushfire Explorer</b><small>Active fires · Australia</small></span></a>
+    <div class="clock"><small>AEST<br>Queensland</small><span class="cells" id="clock" aria-hidden="true"></span></div>
+  </div></div>
+  <nav class="sub" aria-label="Primary"><div class="wrap"><a href="09-departures.html">Fires</a><a href="09-departures.html#warnings">Warnings</a><a href="09-departures.html#regions">States</a><a href="#" aria-current="page">Cloncurry</a></div></nav>
+</header>
+
+<main class="wrap">
+  <p class="crumb"><a href="09-departures.html">‹ Back to board</a></p>
+  <section class="board" aria-labelledby="h-f">
+    <h1 class="vh" id="h-f" style="position:absolute;left:-9999px">Bushfire – Cloncurry</h1>
+    <div class="hero" id="hero"></div>
+    <div class="facts" id="facts"></div>
+  </section>
+
+  <section class="led" aria-labelledby="h-w">
+    <div class="hd" id="whd"><h2 id="h-w" style="position:absolute;left:-9999px">Advice warning</h2></div>
+    <p class="hl" id="hl"></p>
+    <div class="bd" id="wbd"></div>
+    <div class="ft">Message from the Queensland Fire Department, shown unaltered.</div>
+  </section>
+
+  <div class="split">
+    <section class="mapcard" aria-labelledby="h-map">
+      <div class="bhd"><h2 id="h-map">Map</h2><div class="seg" role="group" aria-label="Basemap"><button type="button" aria-pressed="true">Terrain</button><button type="button" aria-pressed="false">Satellite</button></div></div>
+      <div id="fmap" role="region" aria-label="Map of the Cloncurry fire"></div>
+      <div class="mapkey" id="mapkey"></div>
+    </section>
+    <section class="board small" aria-labelledby="h-c">
+      <div class="bhd"><h2 id="h-c">Conditions</h2><p id="cp"></p></div>
+      <div class="colhd" id="ccol"></div>
+      <div class="rows" id="crows"></div>
+      <p class="tfb" id="tfb"></p>
+    </section>
+  </div>
+
+  <section class="board small" aria-labelledby="h-l" style="margin-top:18px">
+    <div class="bhd"><h2 id="h-l">Location</h2><p>ABS places · NVIS vegetation · DEA hotspots within 10 km</p></div>
+    <div class="rows" id="lrows"></div>
+  </section>
+</main>
+
+<footer><div class="wrap">
+  <p><b>For information only.</b> Bushfire Explorer compiles official feeds automatically; they may be delayed or incomplete. Follow advice from your state fire agency and emergency broadcaster. In an emergency call 000.</p>
+  <p>QFD · Open-Meteo · CAMS · BoM via Esri · ABS · NVIS · Geoscience Australia · Esri basemap</p>
+</div></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="shared/geo.js"></script>
+<script src="shared/data.js"></script>
+<script src="shared/fire.js"></script>
+<script src="shared/kit.js"></script>
+<script src="shared/nav.js"></script>
+<script>
+(function () {
+  const { esc, num } = K, F = K.F, f = F.fire, w = F.weather, d = F.danger, cx = F.context, n = F.near, ex = f.extra || {};
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const norm = (s) => String(s || '').normalize('NFKD').replace(/[–—]/g, '-').replace(/[^A-Za-z0-9 \-.,/&()':%]/g, '').toUpperCase();
+  const cells = (text, n, cls, right) => { let t = norm(text).slice(0, n); t = right ? t.padStart(n) : t.padEnd(n); const solid = /^rt-/.test(cls || ''); return `<span class="cells" aria-hidden="true">${[...t].map((ch) => `<span class="c ${solid && ch === ' ' ? '' : (cls || '')}" data-t="${ch === ' ' ? '' : esc(ch)}">${ch === ' ' ? '' : esc(ch)}</span>`).join('')}</span>`; };
+  const hhmm = (iso) => new Intl.DateTimeFormat('en-AU', { timeZone: F.zone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+  const dd = (iso) => new Intl.DateTimeFormat('en-AU', { timeZone: F.zone, day: '2-digit', month: 'short' }).format(new Date(iso));
+  const m = window.innerWidth < 640;
+  document.getElementById('clock').innerHTML = cells(hhmm(f.updated), 5);
+  document.getElementById('hero').innerHTML = `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">${cells('Cloncurry', 9)}${cells(f.statusLabel, 5, 'out')}${cells('Advice', 6, 'adv')}</div>`;
+  const fact = (l, v, nn, s, cls, right) => `<div class="fact"><span class="lbl">${l}</span>${cells(v, nn, cls, right)}${s ? `<small>${s}</small>` : ''}</div>`;
+  document.getElementById('facts').innerHTML = fact('Incident', ex['Incident number'], m ? 9 : 13, 'Queensland Fire Department') + fact('Started', `${dd(f.started)} ${hhmm(f.started)}`, 12, 'AEST') +
+    fact('Vehicles', '07', 2, '1 on scene · 6 en route') + fact('Hotspots 24 h', String(n.count24), 3, `${n.count72} in 72 h · within 10 km`) +
+    fact('Size ha', '----', 4, 'Not reported', 'dim') + fact('Nearest town', `${cx.nearestTown.name} ${Math.round(cx.nearestTown.distKm)}KM`, m ? 10 : 14, `Fire is ${cx.nearestTown.fromTown} of town`) +
+    fact('Updated', hhmm(f.updated), 5, F.shortDate(f.updated)) + fact('Warning', 'Avoid smoke', 11, 'Advice level', 'adv');
+
+  document.getElementById('whd').innerHTML += `${cells('Advice', 6, 'adv')}<span class="cells" aria-hidden="true">${cells(ex['Warning ID'], 10)}</span><span style="font:600 14px/1.3 var(--flap);letter-spacing:.1em;text-transform:uppercase;color:#a88a4a">Issued ${F.dateTime(ex['Warning issued'])} AEST · ${esc(ex['Warning area'])}</span>`;
+  document.getElementById('hl').textContent = f.headline;
+  document.getElementById('wbd').innerHTML = F.blocks.map((b) => b.type === 'h' ? `<h3>${esc(b.text)}</h3>` : b.type === 'ul' ? `<ul>${b.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : `<p>${esc(b.text)}</p>`).join('');
+
+  const tri = (s) => `<svg width="${s}" height="${Math.round(s * .88)}" viewBox="0 0 16 14"><path d="M8 1 15 13H1Z" fill="#ffd400" stroke="#0e0f11" stroke-width="1.3" stroke-linejoin="round"/></svg>`;
+  K.fireMap(document.getElementById('fmap'), {
+    bases: ['relief', 'labels'],
+    warn: { color: '#f2b200', weight: 2, dashArray: '6 5', fillColor: '#f2b200', fillOpacity: .08 },
+    hot: (h) => ({ radius: h.ageH < 24 ? 3.4 : 2.6, stroke: false, fillColor: h.ageH < 3 ? '#ff6b4a' : h.ageH < 24 ? '#f2b200' : '#8a7a5a', fillOpacity: .95 }),
+    fireIcon: () => L.divIcon({ className: 'mk', html: tri(28), iconSize: [28, 25], iconAnchor: [14, 16] }),
+  });
+  document.getElementById('mapkey').innerHTML = `<span>${tri(14)}Fire</span><span><svg width="22" height="8"><path d="M0 4h22" stroke="#f2b200" stroke-width="2" stroke-dasharray="5 4"/></svg>Warning area</span><span><svg width="8" height="8"><circle cx="4" cy="4" r="3" fill="#ff6b4a"/></svg>&lt; 3 h</span><span><svg width="8" height="8"><circle cx="4" cy="4" r="3" fill="#f2b200"/></svg>&lt; 24 h</span><span><svg width="8" height="8"><circle cx="4" cy="4" r="2.6" fill="#8a7a5a"/></svg>older</span>`;
+
+  document.getElementById('cp').textContent = `Now ${Math.round(w.now.tempC)}°, ${w.now.rh}% humidity, wind ${w.now.windDir} ${Math.round(w.now.windKmh)} km/h`;
+  const cols = m ? '3.6em 2.6em 1fr' : '3.6em 2.6em 4.4em 8.4em 1fr';
+  document.getElementById('ccol').style.cssText = `grid-template-columns:${cols};font-size:16px`;
+  document.getElementById('ccol').innerHTML = (m ? ['Day', 'Max', 'Danger'] : ['Day', 'Max', 'Wind', 'Danger', 'Smoke']).map((h) => `<span style="font-size:12px">${h}</span>`).join('');
+  document.getElementById('crows').innerHTML = w.daily.map((x, i) => { const r = d.days[i], aq = w.aq.forecast[i]; const day = i === 0 ? 'TOD' : F.day(x.date).slice(0, 3);
+    return `<div class="row" style="grid-template-columns:${cols}">${cells(day, 3)}${cells(String(Math.round(x.tMaxC)), 2, '', true)}${m ? '' : cells(`${x.windDirDominant} ${Math.round(x.windMaxKmh)}`, 6)}${cells(r ? r.rating : '', 8, r ? 'rt-' + r.rating : '')}${m ? '' : cells(aq ? aq.category : '', 9, aq && aq.category === 'Very poor' ? 'out' : 'ctl')}</div>`; }).join('');
+  document.getElementById('tfb').innerHTML = `<b>Fire danger:</b> ${esc(d.district)} district. ${esc(d.tfb.text)}`;
+
+  const lcols = m ? '1fr' : '12em 1fr';
+  document.getElementById('lrows').innerHTML = [['Council', cx.lga + ' Shire'], ['Remoteness', cx.remoteness], ['Vegetation', cx.vegetation.group], ['Protected area', 'None'], ['Latest hotspot', hhmm(n.latest) + ' AEST'], ['Peak power', Math.round(n.maxFrp) + ' MW'], ['Position', `${f.lat.toFixed(3)} ${f.lon.toFixed(3)}`]]
+    .map(([l, v]) => `<div class="row" style="grid-template-columns:${lcols}"><span style="font:600 13px/1 var(--flap);letter-spacing:.14em;text-transform:uppercase;color:var(--amber)">${l}</span>${cells(v, m ? 18 : 26)}</div>`).join('');
+
+  if (!reduce) {
+    const CH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', els = [...document.querySelectorAll('#hero .c, #facts .c')].filter((e) => e.dataset.t);
+    const stops = els.map((e) => 4 + Math.floor(Math.random() * 8) + [...e.parentNode.children].indexOf(e) * .8);
+    let tick = 0; const id = setInterval(() => { tick++; let live = 0; els.forEach((e, i) => { if (tick < stops[i]) { e.textContent = CH[(Math.random() * CH.length) | 0]; live++; } else if (e.textContent !== e.dataset.t) e.textContent = e.dataset.t; }); if (!live) clearInterval(id); }, 45);
+  }
+})();
+</script>
+</body>
+</html>
