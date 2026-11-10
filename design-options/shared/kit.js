@@ -89,6 +89,7 @@
   }
   function agoShort(iso) { return ago(iso).replace(' min ago', 'm').replace(' h ago', 'h').replace(' days ago', 'd'); }
   const tz = 'Australia/Sydney';
+  const TZ_OF = { NSW: 'Australia/Sydney', ACT: 'Australia/Sydney', VIC: 'Australia/Melbourne', TAS: 'Australia/Hobart', QLD: 'Australia/Brisbane', SA: 'Australia/Adelaide', NT: 'Australia/Darwin', WA: 'Australia/Perth' };
   const snapDate = new Intl.DateTimeFormat('en-AU', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(AT);
   const snapTime = new Intl.DateTimeFormat('en-AU', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true }).format(AT).replace(' ', ' ');
   const snapISODate = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(AT);
@@ -186,8 +187,62 @@
     return m;
   }
 
+  // ---------- fire detail page (loaded with fire.js) ----------
+  const FIRE_UID = 'qld:QF1-26-152531';
+  const pageBase = () => location.pathname.split('/').pop().replace(/(-fire)?\.html$/, '');
+  function fireHref(f) { return f && f.uid === FIRE_UID ? pageBase() + '-fire.html' : '#'; }
+  let F = null;
+  if (window.FIRE) {
+    const X = window.FIRE, zone = TZ_OF[X.fire.state] || 'Australia/Sydney';
+    const fmt = (iso, o) => new Intl.DateTimeFormat('en-AU', Object.assign({ timeZone: zone }, o)).format(new Date(iso));
+    const blocks = [];
+    String(X.fire.body || '').split(/\n+/).map((l) => l.trim()).filter(Boolean).forEach((l) => {
+      if (/^- /.test(l)) { const last = blocks[blocks.length - 1]; const item = l.slice(2); if (last && last.type === 'ul') last.items.push(item); else blocks.push({ type: 'ul', items: [item] }); }
+      else if (/:$/.test(l) && l.length < 40) blocks.push({ type: 'h', text: l.replace(/:$/, '') });
+      else blocks.push({ type: 'p', text: l });
+    });
+    F = Object.assign({}, X, {
+      zone, zoneLabel: zone === 'Australia/Brisbane' ? 'AEST' : 'local time',
+      time: (iso) => fmt(iso, { hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\s/g, '').toLowerCase(),
+      dateTime: (iso) => fmt(iso, { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\s(am|pm)$/i, (m) => m.trim().toLowerCase()),
+      shortDate: (iso) => fmt(iso, { weekday: 'short', day: 'numeric', month: 'short' }),
+      day: (d) => new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(d + 'T00:00:00Z')),
+      dayName: (d) => new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', weekday: 'long' }).format(new Date(d + 'T00:00:00Z')),
+      blocks,
+      fireRec: fires.find((f) => f.uid === X.fire.uid),
+    });
+  }
+  // opts: bases (['light','relief','labels','topo','imagery'] in draw order), warn (style), hot (fn -> style|null), fireIcon (fn -> L.divIcon), zoomControl, scale
+  function fireMap(el, opts) {
+    opts = opts || {};
+    const X = window.FIRE, B = [[X.base.south, X.base.west], [X.base.north, X.base.east]];
+    const m = L.map(el, { zoomControl: opts.zoomControl !== false, scrollWheelZoom: false, zoomSnap: 0.25, minZoom: 9.5, maxZoom: 13, maxBounds: B, maxBoundsViscosity: 1 });
+    m.attributionControl.setPrefix(false);
+    m.attributionControl.addAttribution('Basemap © Esri, HERE, Garmin, USGS · Warning area: QFD · Hotspots: Geoscience Australia DEA');
+    const FILE = { light: 'light.jpg', relief: 'relief.jpg', labels: 'labels.png', topo: 'topo.jpg', imagery: 'imagery.jpg' };
+    m.layers = {};
+    (opts.bases || ['light', 'relief', 'labels']).forEach((b) => { m.layers[b] = L.imageOverlay('shared/fire/' + FILE[b], B, { className: 'base-' + b, interactive: false }).addTo(m); });
+    m.layers.warn = L.geoJSON(X.warningGeometry, { interactive: false, style: opts.warn || { color: '#c8401c', weight: 2, fillColor: '#c8401c', fillOpacity: .08, dashArray: '6 4' } }).addTo(m);
+    if (opts.hot) {
+      m.createPane('hot').style.zIndex = 450;
+      const r = L.canvas({ padding: 0.3, pane: 'hot' }), g = m.layers.hot = L.layerGroup().addTo(m);
+      X.nearPts.slice().sort((a, b) => b[2] - a[2]).forEach((h) => { const st = opts.hot({ lon: h[0], lat: h[1], ageH: h[2], frp: h[3], sat: h[4] }); if (st) L.circleMarker([h[1], h[0]], Object.assign({ renderer: r, interactive: false }, st)).addTo(g); });
+    }
+    if (opts.fireIcon) m.layers.fire = L.marker([X.fire.lat, X.fire.lon], { icon: opts.fireIcon(X.fire), title: X.fire.name, zIndexOffset: 1000 }).addTo(m);
+    if (opts.scale !== false) L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(m);
+    const wb = m.layers.warn.getBounds();
+    const fit = () => {
+      m.fitBounds(wb, { padding: opts.fitPadding || [16, 16], animate: false });
+      const minZ = m.getBoundsZoom(B, true); m.setMinZoom(minZ); if (m.getZoom() < minZ) m.setView(wb.getCenter(), minZ, { animate: false });
+    };
+    fit();
+    let t; window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => { m.invalidateSize(); fit(); }, 150); });
+    m.refit = fit;
+    return m;
+  }
+
   window.K = { S, G, AT, STATES, STATE_NAME, STATE_SHORT, LABEL_AT, ALERT_RANK, ALERT_LABEL, STATUS_LABEL, KIND_LABEL, RATING_COLOR, RATING_ORDER,
     fires, active, controlled, planned, ranked, warnings, counts, byState, danger,
     ha, num, ago, agoShort, esc, shortName, title, sentence, snapDate, snapTime, snapISODate,
-    inGeom, stateAt, stateFeature, bbox, projector, landGrid, map };
+    inGeom, stateAt, stateFeature, bbox, projector, landGrid, map, FIRE_UID, fireHref, fireMap, F };
 })();

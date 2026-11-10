@@ -8,136 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sofia+Sans:wght@400;600;800&family=Sofia+Sans+Condensed:wght@400;600;700&family=Red+Hat+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="shared/leaflet.css">
-<style>
-/* Synoptic — a weather-bureau data product: issue line, observation tables with banded headers, small charts drawn to
-   scale, station-model symbols on the map (fill shows control status). Cool white ground, navy ink, one fire red. */
-:root {
-  --paper: #ffffff;
-  --ink: #0e2233;
-  --ink-2: #566a7a;
-  --band: #dde7ef;     /* table header band */
-  --zebra: #f4f7fa;
-  --line: #c9d5de;
-  --blue: #1d5c99;     /* links, isobar blue */
-  --fire: #c62d1f;
-  --hot-old: #e3a33b;
-  --sans: "Sofia Sans", "Segoe UI", system-ui, sans-serif;
-  --cond: "Sofia Sans Condensed", "Arial Narrow", sans-serif;
-  --mono: "Red Hat Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-  color-scheme: light;
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.45 var(--sans); }
-a { color: var(--blue); }
-button, input { font: inherit; color: inherit; }
-:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.wrap { max-width: 1280px; margin: 0 auto; padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); }
-
-header { border-bottom: 2px solid var(--ink); }
-.hrow { display: flex; justify-content: space-between; align-items: center; gap: 12px 24px; flex-wrap: wrap; padding-block: 14px 0; }
-.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); }
-.brand b { font-weight: 800; font-size: 24px; letter-spacing: -.02em; }
-.brand svg { flex: none; }
-.issue { font-family: var(--mono); font-size: 13px; color: var(--ink-2); }
-nav.tabs { display: flex; gap: 4px; margin-top: 10px; overflow-x: auto; }
-nav.tabs a { padding: 8px 12px 9px; text-decoration: none; color: var(--ink); font-weight: 600; border-bottom: 3px solid transparent; white-space: nowrap; }
-nav.tabs a[aria-current] { border-bottom-color: var(--blue); color: var(--blue); }
-nav.tabs a:hover { background: var(--zebra); }
-
-h1 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .08em; }
-h2 { font-size: 22px; font-weight: 800; margin: 0; letter-spacing: -.01em; }
-.sub { color: var(--ink-2); font-size: 14px; }
-
-/* observation strip */
-.obs { width: 100%; border-collapse: collapse; font-family: var(--cond); }
-.obs th { background: var(--band); font-weight: 600; font-size: 13px; text-align: left; padding: 6px 12px; border: 1px solid var(--line); white-space: nowrap; }
-.obs td { padding: 8px 12px; border: 1px solid var(--line); vertical-align: bottom; }
-.obs .v { font-family: var(--mono); font-size: 28px; font-weight: 500; line-height: 1; }
-.obs .v.z { color: var(--ink-2); }
-.obs .u { font-size: 13px; color: var(--ink-2); margin-left: 4px; }
-.obswrap { overflow-x: auto; }
-
-/* map + charts */
-.panel { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; margin-top: 18px; }
-.maphd { display: flex; justify-content: space-between; align-items: center; gap: 10px 20px; flex-wrap: wrap; padding: 8px 10px; background: var(--band); border: 1px solid var(--line); border-bottom: 0; }
-.radio { display: inline-flex; gap: 14px; flex-wrap: wrap; font-size: 15px; }
-.radio label, .cbs label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-.radio input, .cbs input { accent-color: var(--blue); margin: 0; }
-.cbs { display: inline-flex; gap: 14px; flex-wrap: wrap; font-size: 15px; }
-#map { height: 560px; border: 1px solid var(--line); }
-.mapft { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 18px; padding: 8px 10px; border: 1px solid var(--line); border-top: 0; font-size: 13px; color: var(--ink-2); }
-.key { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
-.key span { display: inline-flex; gap: 5px; align-items: center; }
-.show { display: flex; gap: 6px; flex-wrap: wrap; }
-.show button { border: 1px solid var(--line); background: var(--paper); padding: 3px 9px; font-size: 13px; cursor: pointer; font-family: var(--cond); }
-.show button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
-
-.charts { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-.chart { border: 1px solid var(--line); }
-.chart h3 { margin: 0; padding: 7px 10px; background: var(--band); font: 600 14px/1.2 var(--cond); display: flex; justify-content: space-between; gap: 8px; }
-.chart h3 span { font-weight: 400; color: var(--ink-2); }
-.chart .body { padding: 10px; }
-.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
-.chart p { margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
-.tfb { margin-top: 14px; padding: 8px 10px; border: 1px solid var(--line); font-size: 14px; }
-.tfb b { font-family: var(--cond); font-weight: 700; }
-
-/* tables */
-section { margin-top: 44px; }
-.shd { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 10px; }
-.tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 10px; }
-.tools input[type=search] { flex: 1 1 260px; min-width: 0; border: 1px solid var(--line); padding: 7px 10px; }
-.tablewrap { overflow-x: auto; border: 1px solid var(--line); }
-table.data { width: 100%; border-collapse: collapse; font-family: var(--cond); font-size: 15px; }
-table.data th { background: var(--band); text-align: left; font-weight: 600; font-size: 13px; padding: 7px 10px; white-space: nowrap; border-bottom: 1px solid var(--line); }
-table.data td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-table.data tbody tr:nth-child(even) { background: var(--zebra); }
-table.data tbody tr:hover { background: #e9f1f8; }
-table.data .r { text-align: right; }
-table.data .nm { font-weight: 600; }
-table.data .nm a { color: var(--ink); text-decoration: none; }
-table.data .nm a:hover { color: var(--blue); text-decoration: underline; }
-.stn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.wtag { font: 600 12px/1 var(--cond); padding: 3px 6px; background: #ffd400; color: var(--ink); white-space: nowrap; }
-.pager { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-top: 10px; font-size: 14px; }
-.pager button { border: 1px solid var(--line); background: var(--paper); padding: 4px 10px; cursor: pointer; font-family: var(--mono); font-size: 13px; }
-.pager button[aria-current] { background: var(--blue); border-color: var(--blue); color: #fff; }
-.pager button:disabled { color: var(--line); cursor: default; }
-.pager .of { margin-left: auto; color: var(--ink-2); }
-
-.wsum { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0; border: 1px solid var(--line); }
-.wsum > div { padding: 12px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; }
-.wsum h3 { margin: 0 0 6px; font: 700 15px/1.2 var(--cond); display: flex; justify-content: space-between; }
-.wsum h3 span { font-weight: 400; color: var(--ink-2); }
-.wsum ul { margin: 0; padding-left: 18px; font-size: 15px; }
-.wsum li { margin: 3px 0; }
-.wsum li::marker { color: #b89a00; }
-.wsum .t { font-family: var(--mono); font-size: 12px; color: var(--ink-2); margin-left: 4px; }
-
-.bar { display: inline-block; height: 10px; background: var(--hot-old); vertical-align: middle; margin-right: 6px; }
-.dist { display: inline-flex; height: 12px; width: 120px; border: 1px solid var(--ink); vertical-align: middle; margin-right: 6px; }
-.dist i { display: block; height: 100%; }
-
-footer { margin-top: 56px; border-top: 2px solid var(--ink); }
-footer .wrap { padding-block: 18px 90px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 32px; font-size: 14px; color: var(--ink-2); }
-footer p { margin: 0; max-width: 72ch; }
-footer b { color: var(--ink); }
-
-.leaflet-container { font-family: var(--sans); }
-.leaflet-bar { border-radius: 2px !important; box-shadow: none !important; border: 1px solid var(--line) !important; }
-.leaflet-control-attribution { font-size: 10px; }
-.st-label { transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; font: 600 12px/1 var(--cond); color: #7c8d99; letter-spacing: .04em; }
-.fmk { line-height: 0; }
-
-@media (max-width: 1020px) { .panel { grid-template-columns: 1fr; } .charts { display: grid; grid-template-columns: 1fr 1fr; } }
-@media (max-width: 640px) {
-  .charts { grid-template-columns: 1fr; }
-  #map { height: 420px; }
-  .obs .v { font-size: 22px; }
-  .col-loc, .col-upd { display: none; }
-}
-</style>
+<link rel="stylesheet" href="styles/03-synoptic.css">
 </head>
 <body>
 <header>
@@ -270,7 +141,7 @@ footer b { color: var(--ink); }
   function page(p) {
     const list = K.ranked, pages = Math.ceil(list.length / PER);
     document.getElementById('rows').innerHTML = list.slice((p - 1) * PER, p * PER).map((f) => `<tr>
-      <td class="r mono">${f.rank}</td><td class="nm"><a href="#">${esc(f.name)}</a></td><td class="col-loc">${esc(f.place)}</td><td>${f.state}</td>
+      <td class="r mono">${f.rank}</td><td class="nm"><a href="${K.fireHref(f)}">${esc(f.name)}</a></td><td class="col-loc">${esc(f.place)}</td><td>${f.state}</td>
       <td><span class="stn">${stn(Object.assign({}, f, { alert: null }), 13)}${esc(f.agencyStatus)}</span></td>
       <td class="r mono">${f.sizeHa != null ? ha(f.sizeHa) : '–'}</td><td>${f.alert ? `<span class="wtag">${K.ALERT_LABEL[f.alert]}</span>` : ''}</td><td class="mono col-upd">${stamp(f.updated)}</td></tr>`).join('');
     let h = `<button type="button" data-p="${p - 1}" ${p === 1 ? 'disabled' : ''}>‹</button>`;
@@ -282,7 +153,7 @@ footer b { color: var(--ink); }
 
   const groups = {};
   K.warnings.forEach((w) => (groups[w.state] = groups[w.state] || []).push(w));
-  document.getElementById('wsum').innerHTML = K.STATES.filter((s) => groups[s]).sort((a, b) => groups[b].length - groups[a].length).map((s) => `<div><h3>${K.STATE_NAME[s]} <span>${groups[s].length} Advice</span></h3><ul>${groups[s].map((w) => `<li><a href="#">${esc(w.title)}</a><span class="t">${stamp(w.updated)}</span></li>`).join('')}</ul></div>`).join('') +
+  document.getElementById('wsum').innerHTML = K.STATES.filter((s) => groups[s]).sort((a, b) => groups[b].length - groups[a].length).map((s) => `<div><h3>${K.STATE_NAME[s]} <span>${groups[s].length} Advice</span></h3><ul>${groups[s].map((w) => `<li><a href="${K.fireHref(w.fire)}">${esc(w.title)}</a><span class="t">${stamp(w.updated)}</span></li>`).join('')}</ul></div>`).join('') +
     `<div><h3>Other states <span>No warnings</span></h3><p class="sub" style="margin:0">${K.STATES.filter((s) => !groups[s]).map((s) => K.STATE_NAME[s]).join(', ')}.</p></div>`;
 
   const maxH = Math.max(...K.byState.map((s) => s.hotspots));

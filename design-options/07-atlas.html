@@ -8,139 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="shared/leaflet.css">
-<style>
-/* Atlas — a reference-atlas plate. The map fills the page with political tints per state and a lettered/numbered grid
-   in the margins; a gazetteer lists every active fire alphabetically with its grid square. Statistics follow as notes. */
-:root {
-  --plate: #fdfdfb;
-  --ink: #2b2a33;
-  --ink-2: #66657a;
-  --sea: #d4e4ea;
-  --sea-ink: #3c6f86;
-  --fire: #b3261e;
-  --grid: #7d8aa0;
-  --rule: #cfd0d6;
-  --t-wa: #f4dcc7; --t-nt: #ede5b4; --t-sa: #dbe6c4; --t-qld: #f2d3d7; --t-nsw: #d7e0f1; --t-vic: #e6d7ed; --t-tas: #d2e9de; --t-act: #f1e3b5;
-  --serif: "EB Garamond", Garamond, "Times New Roman", serif;
-  --sans: "Jost", "Futura", "Century Gothic", "Trebuchet MS", sans-serif;
-  color-scheme: light;
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--plate); color: var(--ink); font: 400 18px/1.5 var(--serif); }
-a { color: inherit; }
-button, input { font: inherit; color: inherit; }
-:focus-visible { outline: 2px solid var(--fire); outline-offset: 2px; }
-.num { font-variant-numeric: tabular-nums lining-nums; }
-.sc { font-family: var(--sans); font-size: 12px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase; }
-.wrap { max-width: 1400px; margin: 0 auto; padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); }
-
-header .wrap { display: flex; justify-content: space-between; align-items: center; gap: 10px 24px; flex-wrap: wrap; padding-block: 14px; border-bottom: 1px solid var(--ink); }
-.brand { font: 600 20px/1 var(--serif); letter-spacing: .14em; text-transform: uppercase; text-decoration: none; }
-header nav { display: flex; gap: 4px 22px; flex-wrap: wrap; font: 500 14px/1 var(--sans); letter-spacing: .06em; }
-header nav a { text-decoration: none; padding: 6px 0; }
-header nav a:hover { color: var(--fire); }
-
-.titleblock { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 28px; align-items: end; padding-block: 26px 16px; }
-.plate-no { font: 500 13px/1 var(--sans); letter-spacing: .24em; text-transform: uppercase; padding: 8px 12px; border: 1px solid var(--ink); align-self: center; }
-h1 { margin: 0; font: 400 clamp(30px, 4vw, 48px)/1.05 var(--serif); letter-spacing: -.005em; text-wrap: balance; }
-h1 i { color: var(--fire); }
-.dateline { margin: 6px 0 0; font-style: italic; color: var(--ink-2); font-size: 17px; }
-.scalebar { font: 500 11px/1 var(--sans); letter-spacing: .1em; text-align: right; }
-.scalebar svg { display: block; margin-top: 4px; }
-
-/* the plate: map with margin grid labels + gazetteer */
-.platebody { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 0; border: 1px solid var(--ink); }
-.mapframe { position: relative; padding: 24px; border-right: 1px solid var(--ink); }
-.mapframe::before { content: ""; position: absolute; inset: 22px; border: 1px solid var(--ink); pointer-events: none; z-index: 2; }
-#map { height: 680px; }
-.mlab { position: absolute; font: 500 12px/1 var(--sans); color: var(--ink-2); transform: translate(-50%, -50%); pointer-events: none; }
-.cartouche { position: absolute; left: 40px; bottom: 40px; z-index: 500; background: var(--plate); border: 1px solid var(--ink); outline: 1px solid var(--ink); outline-offset: 3px; padding: 12px 14px; font-size: 15px; max-width: 230px; }
-.cartouche h2 { margin: 0 0 8px; font: 500 12px/1 var(--sans); letter-spacing: .24em; text-transform: uppercase; text-align: center; }
-.cartouche dl { margin: 0; display: grid; grid-template-columns: 22px 1fr; gap: 5px 8px; align-items: center; line-height: 1.2; }
-.cartouche dt { display: flex; justify-content: center; }
-.cartouche dd { margin: 0; }
-.ovl { position: absolute; right: 40px; top: 40px; z-index: 500; display: flex; background: var(--plate); border: 1px solid var(--ink); font: 500 13px/1 var(--sans); }
-.ovl button { border: 0; background: transparent; padding: 8px 12px; cursor: pointer; }
-.ovl button + button { border-left: 1px solid var(--ink); }
-.ovl button[aria-pressed="true"] { background: var(--ink); color: var(--plate); }
-
-.gaz { display: flex; flex-direction: column; min-width: 0; }
-.gaz-hd { padding: 16px 18px 12px; border-bottom: 1px solid var(--ink); }
-.gaz-hd h2 { margin: 0; font: 400 26px/1.1 var(--serif); }
-.gaz-hd p { margin: 4px 0 10px; font-size: 15px; color: var(--ink-2); font-style: italic; }
-.gaz-hd input { width: 100%; border: 0; border-bottom: 1px solid var(--ink); background: transparent; padding: 6px 0; font: 400 15px/1.2 var(--sans); }
-.gaz-list { overflow-y: auto; max-height: 640px; padding: 4px 18px 18px; flex: 1; }
-.gaz-list h3 { margin: 14px 0 4px; font: 600 15px/1 var(--sans); color: var(--fire); }
-.gaz-list ol { list-style: none; margin: 0; padding: 0; }
-.gaz-list li button { display: grid; grid-template-columns: 1fr auto 34px; gap: 8px; width: 100%; border: 0; background: transparent; padding: 3px 0; text-align: left; cursor: pointer; font-size: 16px; line-height: 1.3; align-items: baseline; }
-.gaz-list li button:hover .gn { color: var(--fire); }
-.gaz-list .gn { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; background: linear-gradient(to right, var(--rule) 50%, transparent 0) bottom / 4px 1px repeat-x; }
-.gaz-list .gn span { background: var(--plate); padding-right: 4px; }
-.gaz-list .gs, .gaz-list .gr { font: 500 12px/1 var(--sans); letter-spacing: .06em; color: var(--ink-2); }
-.gaz-list .gr { text-align: right; color: var(--ink); }
-.gaz-list .w .gn span::after { content: " ▲"; color: #c79a00; font-size: 12px; }
-
-/* notes + tables */
-.notes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px 40px; padding-block: 28px 8px; border-bottom: 1px solid var(--ink); }
-.notes p { margin: 0; font-size: 17px; }
-.notes p::first-line { font-variant: small-caps; letter-spacing: .04em; }
-.notes b { font-weight: 600; }
-section { padding-top: 42px; }
-.shd { display: flex; justify-content: space-between; align-items: baseline; gap: 6px 24px; flex-wrap: wrap; margin-bottom: 10px; }
-h2.t { margin: 0; font: 400 30px/1.1 var(--serif); }
-.shd p { margin: 0; font-style: italic; color: var(--ink-2); font-size: 16px; }
-.cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px 48px; }
-.tablewrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 16px; }
-caption { text-align: left; font: 500 12px/1 var(--sans); letter-spacing: .2em; text-transform: uppercase; padding-bottom: 8px; }
-th { text-align: left; font: 500 12px/1.2 var(--sans); letter-spacing: .1em; text-transform: uppercase; padding: 8px 8px; border-top: 1.5px solid var(--ink); border-bottom: 1px solid var(--ink); white-space: nowrap; color: var(--ink-2); }
-td { padding: 7px 8px; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
-th.r, td.r { text-align: right; }
-td .sub { display: block; font-size: 14px; font-style: italic; color: var(--ink-2); }
-.tint { display: inline-block; width: 16px; height: 12px; border: 1px solid var(--ink); vertical-align: -1px; margin-right: 8px; }
-.wl { font: 500 12px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; background: #ffd400; padding: 2px 5px; }
-.pager { display: flex; gap: 2px; flex-wrap: wrap; align-items: center; padding-top: 10px; font: 500 13px/1 var(--sans); }
-.pager button { border: 1px solid transparent; background: transparent; min-width: 30px; padding: 6px 8px; cursor: pointer; }
-.pager button[aria-current] { border-color: var(--ink); }
-.pager button:disabled { color: var(--rule); cursor: default; }
-.pager .of { margin-left: auto; color: var(--ink-2); font-style: italic; font-family: var(--serif); font-size: 15px; }
-
-footer { margin-top: 56px; border-top: 1px solid var(--ink); }
-footer .wrap { padding-block: 18px 90px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 40px; font-size: 15px; color: var(--ink-2); }
-footer p { margin: 0; }
-footer b { color: var(--ink); font-weight: 600; }
-
-/* leaflet */
-.leaflet-container { font-family: var(--sans); background: var(--sea) !important; }
-.leaflet-control-attribution { font-size: 10px; background: rgba(253,253,251,.8) !important; }
-.st-label { transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; font: italic 400 14px/1 var(--serif); letter-spacing: .32em; text-transform: uppercase; color: #5f5d6e; }
-.sea-l { transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; font: italic 400 15px/1 var(--serif); letter-spacing: .18em; color: var(--sea-ink); }
-.mk { line-height: 0; }
-.mk.hl svg { filter: drop-shadow(0 0 0 #fff) drop-shadow(0 0 4px rgba(179,38,30,.8)); transform: scale(1.6); }
-
-@media (max-width: 1080px) {
-  .platebody { grid-template-columns: 1fr; }
-  .mapframe { border-right: 0; border-bottom: 1px solid var(--ink); }
-  .gaz-list { max-height: 420px; }
-  .notes { grid-template-columns: 1fr; }
-  .cols { grid-template-columns: 1fr; }
-}
-@media (max-width: 640px) {
-  .titleblock { grid-template-columns: 1fr; }
-  .plate-no { justify-self: start; }
-  .scalebar { text-align: left; }
-  .mapframe { padding: 16px; }
-  .mapframe::before { inset: 14px; }
-  #map { height: 420px; }
-  .cartouche { position: static; margin: 12px 0 0; max-width: none; outline: 0; }
-  .cartouche dl { grid-template-columns: 22px 1fr 22px 1fr; }
-  .ovl { right: 22px; top: 22px; }
-  .col-x { display: none; }
-  footer .wrap { grid-template-columns: 1fr; }
-  .sea-l { display: none; }
-  .st-label { font-size: 10px; letter-spacing: .14em; }
-}
-</style>
+<link rel="stylesheet" href="styles/07-atlas.css">
 </head>
 <body>
 <header><div class="wrap">
@@ -311,7 +179,7 @@ footer b { color: var(--ink); font-weight: 600; }
   function page(p) {
     const list = K.ranked, pages = Math.ceil(list.length / PER);
     document.getElementById('rows').innerHTML = list.slice((p - 1) * PER, p * PER).map((f) => `<tr>
-      <td class="r num">${f.rank}</td><td>${esc(f.name)}<span class="sub">${esc(f.place)}</span></td><td style="font-family:var(--sans);font-size:14px">${gridRef(f)}</td><td class="col-x" style="font-family:var(--sans);font-size:14px">${f.state}</td>
+      <td class="r num">${f.rank}</td><td><a href="${K.fireHref(f)}" style="color:inherit">${esc(f.name)}</a><span class="sub">${esc(f.place)}</span></td><td style="font-family:var(--sans);font-size:14px">${gridRef(f)}</td><td class="col-x" style="font-family:var(--sans);font-size:14px">${f.state}</td>
       <td style="font-style:italic">${esc(f.agencyStatus)}</td><td class="r num">${f.sizeHa != null ? ha(f.sizeHa) : '<span style="color:var(--ink-2)">—</span>'}</td></tr>`).join('');
     let h = `<button type="button" data-p="${p - 1}" ${p === 1 ? 'disabled' : ''}>‹</button>`;
     for (let i = 1; i <= pages; i++) h += `<button type="button" data-p="${i}" ${i === p ? 'aria-current="page"' : ''}>${i}</button>`;
@@ -319,7 +187,7 @@ footer b { color: var(--ink); font-weight: 600; }
     const el = document.getElementById('pager'); el.innerHTML = h; el.querySelectorAll('[data-p]').forEach((x) => x.onclick = () => page(+x.dataset.p));
   }
   page(1);
-  document.getElementById('wrows').innerHTML = K.warnings.map((w) => `<tr><td><span class="wl">${K.ALERT_LABEL[w.alert]}</span></td><td>${esc(w.title)}<span class="sub">${w.state}${w.fire ? ' · grid ' + gridRef(w.fire) : ''}</span></td><td class="r num" style="font-size:15px;white-space:nowrap">${ago(w.updated)}</td></tr>`).join('');
+  document.getElementById('wrows').innerHTML = K.warnings.map((w) => `<tr><td><span class="wl">${K.ALERT_LABEL[w.alert]}</span></td><td><a href="${K.fireHref(w.fire)}" style="color:inherit">${esc(w.title)}</a><span class="sub">${w.state}${w.fire ? ' · grid ' + gridRef(w.fire) : ''}</span></td><td class="r num" style="font-size:15px;white-space:nowrap">${ago(w.updated)}</td></tr>`).join('');
   document.getElementById('strows').innerHTML = K.byState.map((s) => `<tr><td><span class="tint" style="background:${TINT[s.code]}"></span>${s.name}</td><td class="r num">${s.noFeed ? '<i style="color:var(--ink-2)">no feed</i>' : s.active}</td><td class="r num">${s.warnings}</td><td class="r num">${s.planned}</td><td class="r num">${num(s.hotspots)}</td><td>${s.danger ? `<span class="tint" style="background:${K.RATING_COLOR[s.danger]}"></span>${s.danger}` : '—'}</td></tr>`).join('');
 })();
 </script>

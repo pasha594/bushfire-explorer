@@ -1,0 +1,32 @@
+/* Teletext — broadcast text pages: a 40 × 25 character grid, the eight-colour palette, double-height banners,
+   a mosaic map built from 2 × 3 block cells, numbered pages and the four coloured Fastext keys. Dark only. */
+:root {
+  --k: #000000; --r: #ff2b1c; --g: #19e619; --y: #ffff00; --b: #1a1aff; --m: #ff2bff; --c: #00ffff; --w: #ffffff;
+  --surround: #0b0b0c;
+  --tt: "VT323", "Courier New", monospace;
+  --fs: 26px; --lh: 1.06;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--surround); }
+body { margin: 0; color: var(--w); font-family: var(--tt); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding-block: 24px 90px;
+  padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
+.tv { background: var(--k); padding: .8em 1.2em; border-radius: 10px; font-size: var(--fs); line-height: var(--lh); box-shadow: 0 0 0 1px #222; max-width: 100%; }
+.screen { position: relative; width: 40ch; white-space: pre; }
+.row { display: flex; height: calc(var(--lh) * 1em); overflow: visible; }
+.row.dh { height: calc(var(--lh) * 2em); }
+.s { display: inline-block; height: 100%; }
+.dh .s { line-height: calc(var(--lh) * 1em); }
+.dh .s > i { display: inline-block; font-style: normal; transform: scaleY(2); transform-origin: 0 0; }
+.f-r { color: var(--r); } .f-g { color: var(--g); } .f-y { color: var(--y); } .f-b { color: var(--b); } .f-m { color: var(--m); } .f-c { color: var(--c); } .f-w { color: var(--w); } .f-k { color: var(--k); }
+.b-r { background: var(--r); } .b-g { background: var(--g); } .b-y { background: var(--y); } .b-b { background: var(--b); } .b-m { background: var(--m); } .b-c { background: var(--c); } .b-w { background: var(--w); }
+button.s, a.s { border: 0; padding: 0; margin: 0; font: inherit; line-height: inherit; cursor: pointer; text-decoration: none; }
+button.s:not([class*="b-"]) { background: transparent; }
+button.s:hover, a.s:hover { text-decoration: underline; }
+button.s[class*="b-"]:hover { filter: brightness(1.15); text-decoration: none; }
+:focus-visible { outline: 2px solid var(--w); outline-offset: 0; }
+canvas.mosaic { position: absolute; left: 0; image-rendering: pixelated; image-rendering: crisp-edges; }
+.entry { display: flex; gap: .6em; align-items: center; margin-top: 14px; font-size: 20px; color: #9a9a9a; }
+.entry input { width: 4.2ch; background: #000; color: var(--y); border: 1px solid #333; font: 26px/1 var(--tt); padding: 2px 6px; text-align: center; }
+.entry button { background: #1a1a1a; color: #ddd; border: 1px solid #333; font: 20px/1 var(--tt); padding: 4px 10px; cursor: pointer; }
+.vh { position: absolute; left: -9999px; }
