@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>02 Survey Sheet · Bushfire Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@1,8..60,400;1,8..60,600&display=swap">
+<link rel="stylesheet" href="shared/leaflet.css">
+<style>
+/* Survey Sheet — the page is laid out like a printed topographic map sheet: title in the top margin, the map inside a
+   neat line with a graticule, a Reference column in the margin, and an index that keys numbered map symbols to the table. */
+:root {
+  --paper: #f8f8f4;
+  --ink: #1d1d1b;
+  --ink-2: #5b5b53;
+  --land: #dfe9cc;     /* vegetation tint */
+  --sea: #d2e4ef;
+  --water: #2f6ea5;    /* hydrography */
+  --contour: #a5683a;  /* relief */
+  --fire: #d2321e;     /* red overprint */
+  --rule: #b9b9ad;
+  --sans: "Barlow Semi Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.45 var(--sans); }
+a { color: inherit; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--fire); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.caps { text-transform: uppercase; letter-spacing: .16em; font-weight: 600; font-size: 12px; }
+.serif { font-family: var(--serif); font-style: italic; }
+
+.outer { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 18px 90px; }
+.sheet { max-width: 1240px; margin: 0 auto; border: 1.5px solid var(--ink); outline: 1px solid var(--ink); outline-offset: 4px; background: var(--paper); }
+
+/* top margin */
+.margin-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 12px 24px; padding: 18px 22px 14px; border-bottom: 1.5px solid var(--ink); }
+.margin-top .l { justify-self: start; }
+.margin-top .r { justify-self: end; text-align: right; }
+.title { margin: 0; text-align: center; font-weight: 700; font-size: clamp(22px, 3vw, 32px); letter-spacing: .26em; text-transform: uppercase; line-height: 1; padding-left: .26em; }
+.title small { display: block; font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 15px; letter-spacing: 0; text-transform: none; margin-top: 8px; color: var(--ink-2); padding: 0; }
+nav.tabs { display: flex; border-bottom: 1.5px solid var(--ink); overflow-x: auto; }
+nav.tabs a { padding: 9px 18px; text-decoration: none; white-space: nowrap; }
+nav.tabs a + a { border-left: 1px solid var(--rule); }
+nav.tabs a:hover { background: var(--land); }
+nav.tabs a[aria-current] { font-weight: 700; }
+
+/* map body: map + reference column */
+.body { display: grid; grid-template-columns: minmax(0, 1fr) 260px; }
+.mapcell { padding: 22px; border-right: 1.5px solid var(--ink); min-width: 0; }
+.mapctl { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 24px; align-items: center; margin-bottom: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--ink); }
+.seg button { border: 0; background: transparent; padding: 5px 12px; cursor: pointer; font-weight: 500; }
+.seg button + button { border-left: 1px solid var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.toggles { display: flex; gap: 6px 18px; flex-wrap: wrap; }
+.toggles label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.toggles input { accent-color: var(--ink); width: 16px; height: 16px; margin: 0; }
+.neat { position: relative; border: 1.5px solid var(--ink); padding: 14px; background:
+  repeating-linear-gradient(90deg, var(--ink) 0 1px, transparent 1px 28px) top / 100% 6px no-repeat,
+  repeating-linear-gradient(90deg, var(--ink) 0 1px, transparent 1px 28px) bottom / 100% 6px no-repeat,
+  repeating-linear-gradient(0deg, var(--ink) 0 1px, transparent 1px 28px) left / 6px 100% no-repeat,
+  repeating-linear-gradient(0deg, var(--ink) 0 1px, transparent 1px 28px) right / 6px 100% no-repeat; }
+#map { height: 600px; border: 1px solid var(--ink); }
+.mapnote { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 10px; color: var(--ink-2); font-size: 14px; }
+
+.ref { padding: 22px 20px; display: flex; flex-direction: column; gap: 22px; }
+.ref h2 { margin: 0 0 8px; }
+.ref dl { margin: 0; display: grid; grid-template-columns: 30px 1fr; gap: 9px 10px; align-items: center; font-size: 14px; line-height: 1.25; }
+.ref dt { display: flex; justify-content: center; }
+.ref dd { margin: 0; }
+.ref .fdr { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--ink); }
+.ref .fdr span { height: 14px; }
+.ref .fdr-l { display: grid; grid-template-columns: repeat(4, 1fr); font-size: 11px; margin-top: 4px; text-align: center; }
+.chips { display: flex; flex-direction: column; gap: 6px; }
+.chips button { display: flex; justify-content: space-between; border: 1px solid var(--ink); background: transparent; padding: 6px 10px; cursor: pointer; text-align: left; }
+.chips button b { font-weight: 700; }
+.chips button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.ref p { margin: 0; font-size: 14px; color: var(--ink-2); }
+
+/* situation strip */
+.situation { display: grid; grid-template-columns: 200px repeat(4, 1fr); border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); }
+.situation > div { padding: 14px 18px; }
+.situation > div + div { border-left: 1px solid var(--rule); }
+.situation .hd { background: var(--ink); color: var(--paper); display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.situation .hd .serif { font-size: 14px; opacity: .85; }
+.situation .n { font-size: 38px; font-weight: 700; line-height: 1; display: flex; align-items: center; gap: 10px; }
+.situation .n.zero { color: var(--ink-2); font-weight: 500; }
+.situation .t { margin-top: 6px; font-size: 14px; }
+.tfb { padding: 10px 22px; font-size: 14px; border-bottom: 1.5px solid var(--ink); }
+
+/* index sections */
+.sec { padding: 30px 22px 8px; }
+.sec + .sec { border-top: 1.5px solid var(--ink); margin-top: 28px; }
+.sechead { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px 20px; margin-bottom: 14px; }
+h2 { margin: 0; font-weight: 700; font-size: 20px; letter-spacing: .18em; text-transform: uppercase; }
+.lede { margin: 0; font-family: var(--serif); font-style: italic; color: var(--ink-2); font-size: 16px; max-width: 60ch; }
+.find { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.find input { flex: 1 1 240px; border: 0; border-bottom: 1.5px solid var(--ink); background: transparent; padding: 6px 2px; min-width: 0; }
+.find .seg button { font-size: 14px; }
+
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th { text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; padding: 8px 10px; border-top: 1.5px solid var(--ink); border-bottom: 1px solid var(--ink); white-space: nowrap; }
+td { padding: 9px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th.r, td.r { text-align: right; }
+td.no { width: 46px; }
+.badge { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1.5px solid var(--ink); border-radius: 50%; font-weight: 700; font-size: 13px; background: var(--paper); }
+.badge.w { background: #ffd400; }
+.nm { font-weight: 600; }
+.nm a { text-decoration: none; }
+.nm a:hover { text-decoration: underline; }
+.sub { color: var(--ink-2); font-size: 14px; }
+.grid { font-size: 14px; white-space: nowrap; color: var(--ink-2); }
+.st { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.st svg { flex: none; }
+.adv { display: inline-block; margin-left: 6px; padding: 0 6px; background: #ffd400; color: var(--ink); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; vertical-align: 1px; }
+.pager { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 0; }
+.pager .pp { display: flex; border: 1px solid var(--ink); }
+.pager button { border: 0; background: transparent; padding: 5px 11px; cursor: pointer; }
+.pager button + button { border-left: 1px solid var(--ink); }
+.pager button[aria-current] { background: var(--ink); color: var(--paper); }
+.pager button:disabled { color: var(--rule); cursor: default; }
+
+.warns { list-style: none; margin: 0; padding: 0; border-top: 1.5px solid var(--ink); }
+.warns li { display: grid; grid-template-columns: 34px 1fr auto; gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--rule); align-items: start; }
+.warns .tm { color: var(--ink-2); font-size: 14px; white-space: nowrap; }
+.more { margin-top: 12px; border: 1px solid var(--ink); background: transparent; padding: 6px 14px; cursor: pointer; }
+
+.statewrap { display: grid; grid-template-columns: minmax(260px, 380px) 1fr; gap: 24px 32px; align-items: start; }
+.statewrap figure { margin: 0; border: 1px solid var(--ink); padding: 10px; }
+.statewrap figcaption { margin-top: 6px; }
+.statewrap svg { display: block; width: 100%; height: auto; }
+
+.foot { padding: 18px 22px; border-top: 1.5px solid var(--ink); margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 32px; font-size: 14px; color: var(--ink-2); }
+.foot p { margin: 0; }
+.foot strong { color: var(--ink); }
+
+/* leaflet skin */
+.leaflet-container { font-family: var(--sans); }
+.leaflet-bar { border: 1px solid var(--ink) !important; border-radius: 0 !important; box-shadow: none !important; }
+.leaflet-bar a { border-radius: 0 !important; color: var(--ink); background: var(--paper); }
+.leaflet-control-attribution { background: rgba(248,248,244,.85) !important; font-size: 10px; }
+.leaflet-control-scale-line { border: 1.5px solid var(--ink); border-top: 0; background: repeating-linear-gradient(90deg, var(--ink) 0 25%, var(--paper) 25% 50%) bottom / 100% 5px no-repeat, rgba(248,248,244,.9); color: var(--ink); font: 600 11px/1 var(--sans); padding: 3px 5px 8px; }
+.st-label { transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; font: 600 11px/1 var(--sans); letter-spacing: .3em; text-transform: uppercase; color: #6a6a5c; text-shadow: 0 0 3px var(--land), 0 0 3px var(--land); }
+.gl { white-space: nowrap; pointer-events: none; font: italic 400 11px/1 var(--serif); color: var(--water); transform: translate(4px, 2px); }
+.gl.lat { transform: translate(4px, -12px); }
+.sea-l { white-space: nowrap; pointer-events: none; font: italic 400 14px/1 var(--serif); letter-spacing: .3em; color: var(--water); transform: translate(-50%, -50%); }
+.sym { position: relative; line-height: 0; }
+.sym b { position: absolute; left: 13px; top: -3px; font: 700 11px/1 var(--sans); color: var(--ink); text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; }
+
+@media (max-width: 980px) {
+  .body { grid-template-columns: 1fr; }
+  .mapcell { border-right: 0; border-bottom: 1.5px solid var(--ink); }
+  .ref { display: grid; grid-template-columns: 1fr 1fr; }
+  .situation { grid-template-columns: repeat(2, 1fr); }
+  .situation .hd { grid-column: 1 / -1; }
+  .situation > div:nth-child(4) { border-left: 0; }
+  .situation > div:nth-child(n+4) { border-top: 1px solid var(--rule); }
+  .statewrap { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .margin-top { grid-template-columns: 1fr; text-align: center; }
+  .margin-top .l, .margin-top .r { justify-self: center; text-align: center; }
+  .mapcell { padding: 12px; }
+  .neat { padding: 8px; }
+  #map { height: 440px; }
+  .ref { grid-template-columns: 1fr; }
+  .situation .n { font-size: 30px; }
+  .col-grid, .col-upd, .col-state { display: none; }
+  .foot { grid-template-columns: 1fr; }
+  .sec { padding-left: 14px; padding-right: 14px; }
+}
+</style>
+</head>
+<body>
+<div class="outer">
+<div class="sheet">
+  <header class="margin-top">
+    <div class="l caps">Australia · National fire situation</div>
+    <h1 class="title">Bushfire Explorer<small>Active fires, warnings and satellite hotspots</small></h1>
+    <div class="r caps" id="edition"></div>
+  </header>
+  <nav class="tabs" aria-label="Primary"><a href="#" aria-current="page">National</a><a href="#index">Top fires</a><a href="#states">By state</a><a href="#">Near me</a><a href="#">Sources</a></nav>
+
+  <div class="body">
+    <div class="mapcell">
+      <div class="mapctl">
+        <div class="seg" role="group" aria-label="Map overlay"><button type="button" id="ov-hot" aria-pressed="true">Satellite hotspots</button><button type="button" id="ov-fdr" aria-pressed="false">Fire danger</button></div>
+        <div class="toggles"><label><input type="checkbox" id="t1" checked> Perimeters</label><label><input type="checkbox" id="t2" checked> Warning areas</label><label><input type="checkbox" id="t3"> Satellite photo</label></div>
+      </div>
+      <div class="neat"><div id="map" role="region" aria-label="Map of fires in Australia"></div></div>
+      <div class="mapnote"><span class="serif">Numbered symbols refer to the Index to active fires below.</span><span>Projection: Web Mercator · Datum GDA2020</span></div>
+    </div>
+    <aside class="ref" aria-label="Map reference">
+      <div>
+        <h2 class="caps" style="letter-spacing:.2em">Reference</h2>
+        <dl id="legend"></dl>
+      </div>
+      <div>
+        <div class="caps" style="margin-bottom:8px">Fire danger rating</div>
+        <div class="fdr"><span style="background:#64bf30"></span><span style="background:#ffe000"></span><span style="background:#ff6d00"></span><span style="background:#ad0909"></span></div>
+        <div class="fdr-l"><span>Moderate</span><span>High</span><span>Extreme</span><span>Catas.</span></div>
+      </div>
+      <div>
+        <div class="caps" style="margin-bottom:8px">Show on map</div>
+        <div class="chips" id="chips"></div>
+      </div>
+      <p class="serif">Hotspots are satellite detections of heat. A single fire can produce many, and not every hotspot is a fire.</p>
+    </aside>
+  </div>
+
+  <div class="situation" id="situation"></div>
+  <div class="tfb"><span class="caps">Total fire ban today</span>&nbsp;&nbsp;None declared. Tasmania and Northern Territory: check the state agency.</div>
+
+  <section class="sec" id="index" aria-labelledby="h-idx">
+    <div class="sechead"><h2 id="h-idx">Index to active fires</h2><p class="lede">Largest fires first, by known size. Grid references give each fire’s reported position.</p></div>
+    <div class="find">
+      <label for="q" style="position:absolute;left:-9999px">Search fires</label><input id="q" type="search" placeholder="Search fires, towns or councils">
+      <div class="seg" role="group" aria-label="Fire type"><button type="button" aria-pressed="false">All</button><button type="button" aria-pressed="true">Bushfires</button><button type="button" aria-pressed="false">Planned</button></div>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>No.</th><th>Name and locality</th><th class="col-grid">Grid reference</th><th class="col-state">State</th><th>Status</th><th class="r">Area ha</th><th class="r col-upd">Updated</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <div class="pager" id="pager"></div>
+  </section>
+
+  <section class="sec" aria-labelledby="h-warn">
+    <div class="sechead"><h2 id="h-warn">Warnings in force</h2><p class="lede">Australian Warning System alerts, highest level first.</p></div>
+    <ul class="warns" id="warns"></ul>
+    <button type="button" class="more" id="more"></button>
+  </section>
+
+  <section class="sec" id="states" aria-labelledby="h-st">
+    <div class="sechead"><h2 id="h-st">Index to state sheets</h2><p class="lede">Each state sheet lists that agency’s incidents and district fire danger ratings.</p></div>
+    <div class="statewrap">
+      <figure><div id="indexmap"></div><figcaption class="caps" style="font-size:11px">Active fires by state · hotspots in brackets</figcaption></figure>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Sheet</th><th class="r">Active</th><th class="r">Warnings</th><th class="r">Hotspots 24 h</th><th>Danger today</th></tr></thead>
+        <tbody id="strows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p><strong>Not for safety-of-life decisions.</strong> Compiled automatically from official feeds, which may be delayed or incomplete. Always follow advice from your state fire agency and emergency broadcaster. In an emergency call 000.</p>
+    <p>Sources: NSW RFS, VicEmergency, QFD, SA CFS, DFES, TFS, ACT ESA, Geoscience Australia, Bureau of Meteorology via Esri, NAFI, Open-Meteo. Outlines: Natural Earth. Users noting errors or omissions are invited to report them.</p>
+  </footer>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="shared/geo.js"></script>
+<script src="shared/data.js"></script>
+<script src="shared/danger.js"></script>
+<script src="shared/kit.js"></script>
+<script src="shared/nav.js"></script>
+<script>
+(function () {
+  const { esc, ha, num, ago } = K;
+  const INK = '#1d1d1b', FIRE = '#d2321e', WATER = '#2f6ea5';
+  const dms = (v, pos, neg) => { const a = Math.abs(v), d = Math.floor(a), m = Math.round((a - d) * 60); return `${d}°${String(m === 60 ? 0 : m).padStart(2, '0')}′${v < 0 ? neg : pos}`; };
+  const grid = (f) => `${dms(f.lat, 'N', 'S')} ${dms(f.lon, 'E', 'W')}`;
+  const symOut = (s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="${FIRE}" stroke="${INK}" stroke-width="1.5"/></svg>`;
+  const symCtl = (s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="#fff" stroke="${FIRE}" stroke-width="2"/><path d="M7 2a5 5 0 0 1 0 10Z" fill="${FIRE}"/></svg>`;
+  const symDone = (s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="#fff" stroke="${INK}" stroke-width="1.5"/></svg>`;
+  const symWarn = (s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.5 17 16H1Z" fill="#ffd400" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/><circle cx="9" cy="11.2" r="2.4" fill="${FIRE}"/></svg>`;
+  const sym = (f, s) => f.alert ? symWarn(s ? s + 4 : 18) : f.status === 'out_of_control' ? symOut(s) : f.status === 'being_controlled' ? symCtl(s) : symDone(s);
+
+  document.getElementById('edition').innerHTML = `Edition ${K.snapISODate.split('-').reverse().join('.')}<br>${K.snapTime} AEDT`;
+
+  document.getElementById('legend').innerHTML = [
+    [symWarn(), 'Fire with a warning (Advice shown)'], [symOut(), 'Fire, out of control'], [symCtl(), 'Fire, being controlled'], [symDone(), 'Fire, under control'],
+    ['<svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="2.6" fill="#d2321e"/></svg>', 'Hotspot, last 3 hours'],
+    ['<svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="2" fill="#c7772d"/></svg>', 'Hotspot, last 24 hours'],
+    ['<svg width="28" height="8" aria-hidden="true"><path d="M0 4h28" stroke="#1d1d1b" stroke-width="1.4" stroke-dasharray="7 3 2 3"/></svg>', 'State or territory boundary'],
+    ['<svg width="28" height="8" aria-hidden="true"><path d="M0 4h28" stroke="#2f6ea5" stroke-width="1.2"/></svg>', 'Coastline'],
+  ].map(([s, t]) => `<dt>${s}</dt><dd>${t}</dd>`).join('');
+
+  const c = K.counts;
+  document.getElementById('chips').innerHTML = `<button type="button" aria-pressed="true"><span>Active fires</span><b class="num">${c.active}</b></button><button type="button" aria-pressed="false"><span>Under control</span><b class="num">${c.controlled}</b></button><button type="button" aria-pressed="false"><span>Planned burns</span><b class="num">${c.planned}</b></button>`;
+
+  const sit = (n, t, icon) => `<div><div class="n num${n === 0 ? ' zero' : ''}">${icon || ''}${num(n)}</div><div class="t">${t}</div></div>`;
+  document.getElementById('situation').innerHTML = `<div class="hd"><span class="caps">Situation</span><span class="serif">at ${K.snapTime} AEDT, ${K.snapDate}</span></div>` +
+    sit(c.emergency, 'Emergency Warnings') + sit(c.watch, 'Watch and Act') + sit(c.advice, 'Advice', symWarn(26)) + sit(c.hotspots, 'Satellite hotspots, last 24 hours');
+
+  // map
+  const map = K.map(document.getElementById('map'), {
+    sea: '#d2e4ef',
+    graticule: { step: 5, style: { color: WATER, weight: .6, opacity: .55 } },
+    neighbour: { color: WATER, weight: .8, fillColor: '#eceee4', fillOpacity: 1 },
+    state: { color: INK, weight: 1.3, dashArray: '7 3 2 3', fillColor: '#dfe9cc', fillOpacity: 1 },
+    danger: (p) => ({ stroke: false, fillColor: K.RATING_COLOR[p.rating], fillOpacity: p.rating === 'No Rating' ? 0 : .6 }),
+    hot: (h) => h.ageH < 3 ? { radius: 2.6, stroke: false, fillColor: FIRE, fillOpacity: .95 } : h.ageH < 24 ? { radius: 1.9, stroke: false, fillColor: '#c7772d', fillOpacity: .75 } : null,
+    labels: (s) => s === 'ACT' ? null : `<span>${K.STATE_NAME[s]}</span>`,
+    fireIcon: (f) => L.divIcon({ className: 'symw', html: '<div class="sym">' + sym(f) + (f.rank <= 15 ? `<b>${f.rank}</b>` : '') + '</div>', iconSize: f.alert ? [18, 18] : [14, 14], iconAnchor: f.alert ? [9, 11] : [7, 7] }),
+  });
+  // coastline overprint in blue, graticule labels and sea names, scale bar
+  L.geoJSON(K.G.coast, { interactive: false, style: { color: WATER, weight: 1.1, fill: false } }).addTo(map);
+  for (let lon = 115; lon <= 150; lon += 5) L.marker([-10.3, lon], { interactive: false, icon: L.divIcon({ className: 'gl', html: lon + '°E', iconSize: null }) }).addTo(map);
+  for (let lat = -15; lat >= -40; lat -= 5) L.marker([lat, 113], { interactive: false, icon: L.divIcon({ className: 'gl lat', html: Math.abs(lat) + '°S', iconSize: null }) }).addTo(map);
+  [['Indian Ocean', -33, 105.5], ['Coral Sea', -17, 152.5], ['Tasman Sea', -39, 158], ['Great Australian Bight', -36.2, 131], ['Timor Sea', -12, 125.5], ['Gulf of Carpentaria', -14.2, 139.5]]
+    .forEach(([n, a, o]) => L.marker([a, o], { interactive: false, icon: L.divIcon({ className: 'sea-l', html: n, iconSize: null }) }).addTo(map));
+  L.control.scale({ metric: true, imperial: false, maxWidth: 140, position: 'bottomleft' }).addTo(map);
+
+  const hb = document.getElementById('ov-hot'), fb = document.getElementById('ov-fdr');
+  const ov = (fdr) => { hb.setAttribute('aria-pressed', !fdr); fb.setAttribute('aria-pressed', fdr); if (fdr) { map.removeLayer(map.layers.hot); map.layers.danger.addTo(map); } else { map.removeLayer(map.layers.danger); map.layers.hot.addTo(map); } };
+  hb.onclick = () => ov(false); fb.onclick = () => ov(true);
+
+  // index table
+  const PER = 15;
+  function page(p) {
+    const list = K.ranked, pages = Math.ceil(list.length / PER);
+    document.getElementById('rows').innerHTML = list.slice((p - 1) * PER, p * PER).map((f) => `<tr>
+      <td class="no"><span class="badge num${f.alert ? ' w' : ''}">${f.rank}</span></td>
+      <td><div class="nm"><a href="#">${esc(f.name)}</a>${f.alert ? '<span class="adv">Advice</span>' : ''}</div><div class="sub">${esc(f.place)}</div></td>
+      <td class="grid num col-grid">${grid(f)}</td>
+      <td class="col-state">${f.state}</td>
+      <td><span class="st">${sym(Object.assign({}, f, { alert: null }), 12)}${esc(f.agencyStatus)}</span></td>
+      <td class="r num">${f.sizeHa != null ? ha(f.sizeHa) : '<span class="sub">n.r.</span>'}</td>
+      <td class="r sub num col-upd">${ago(f.updated)}</td></tr>`).join('');
+    let h = `<span class="sub">Sheet ${p} of ${pages} · ${list.length} active fires · n.r. = not reported</span><div class="pp"><button type="button" data-p="${p - 1}" ${p === 1 ? 'disabled' : ''}>‹ Prev</button>`;
+    for (let i = 1; i <= pages; i++) h += `<button type="button" data-p="${i}" ${i === p ? 'aria-current="page"' : ''}>${i}</button>`;
+    h += `<button type="button" data-p="${p + 1}" ${p === pages ? 'disabled' : ''}>Next ›</button></div>`;
+    const el = document.getElementById('pager'); el.innerHTML = h; el.querySelectorAll('[data-p]').forEach((b) => b.onclick = () => page(+b.dataset.p));
+  }
+  page(1);
+
+  let all = false;
+  function warns() {
+    document.getElementById('warns').innerHTML = (all ? K.warnings : K.warnings.slice(0, 6)).map((w) => `<li><span>${symWarn(22)}</span><div><div class="nm">${esc(w.title)} <span class="adv">${K.ALERT_LABEL[w.alert]}</span></div><div class="sub">${w.state} · ${esc(w.place)}</div></div><span class="tm num">${ago(w.updated)}</span></li>`).join('');
+    document.getElementById('more').textContent = all ? 'Show fewer' : `Show all ${K.warnings.length} warnings`;
+  }
+  document.getElementById('more').onclick = () => { all = !all; warns(); };
+  warns();
+
+  // index to state sheets: a small schematic map with counts
+  const P = K.projector([112.5, -44, 154, -10], 360, 6);
+  const lab = { WA: [121.5, -26], NT: [133.5, -20], SA: [135.5, -30], QLD: [144.5, -23], NSW: [146.5, -32.6], VIC: [144, -37.2], TAS: [146.6, -42.3], ACT: [151.6, -36.4] };
+  let svg = `<svg viewBox="0 0 ${P.w} ${P.h}" role="img" aria-label="Index map of states with active fire counts">`;
+  K.G.states.features.forEach((f) => { svg += `<path d="${P.path(f.geometry)}" fill="#dfe9cc" stroke="#1d1d1b" stroke-width=".8"/>`; });
+  K.byState.forEach((s) => {
+    const [x, y] = P.xy(...lab[s.code]);
+    svg += `<text x="${x}" y="${y}" text-anchor="middle" font-family="Barlow Semi Condensed, sans-serif" font-size="11" letter-spacing="1.5" fill="#1d1d1b" font-weight="600">${s.code}</text><text x="${x}" y="${y + 15}" text-anchor="middle" font-family="Barlow Semi Condensed, sans-serif" font-size="14" font-weight="700" fill="${s.active ? '#d2321e' : '#5b5b53'}">${s.noFeed ? '–' : s.active}<tspan font-size="10" font-weight="500" fill="#5b5b53"> (${num(s.hotspots)})</tspan></text>`;
+  });
+  const [ax, ay] = P.xy(149.1, -35.3), [bx, by] = P.xy(151.2, -36.0);
+  svg += `<path d="M${ax},${ay} L${bx - 6},${by - 8}" stroke="#1d1d1b" stroke-width=".6"/></svg>`;
+  document.getElementById('indexmap').innerHTML = svg;
+  document.getElementById('strows').innerHTML = K.byState.map((s) => `<tr><td><a class="nm" href="#">${s.name}</a></td><td class="r num">${s.noFeed ? '<span class="sub">no feed</span>' : s.active}</td><td class="r num">${s.warnings}</td><td class="r num">${num(s.hotspots)}</td><td>${s.danger ? `<span class="st"><span style="width:22px;height:12px;border:1px solid #1d1d1b;background:${K.RATING_COLOR[s.danger]};display:inline-block"></span>${s.danger}</span>` : '—'}</td></tr>`).join('');
+})();
+</script>
+</body>
+</html>
