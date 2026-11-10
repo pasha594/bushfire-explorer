@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>04 Ranger · Cloncurry fire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&family=Overpass+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="shared/leaflet.css">
+<link rel="stylesheet" href="styles/04-ranger.css">
+<style>
+.crumb { margin: 0 0 12px; font-weight: 800; font-size: 15px; }
+.crumb a { text-decoration: none; }
+.titlesign { display: flex; justify-content: space-between; align-items: center; gap: 12px 28px; flex-wrap: wrap; padding: 22px 28px 18px; margin-bottom: 18px; }
+.titlesign h1 { color: var(--cream); font-size: clamp(30px, 4.4vw, 48px); }
+.titlesign p { margin: 4px 0 0; font-weight: 600; opacity: .9; }
+.titlesign .stt { text-align: right; }
+.titlesign .stt b { display: block; font-size: 22px; }
+.alert { background: var(--board); border: 2px solid var(--line); border-radius: 12px; overflow: hidden; }
+.alert .hd { background: #ffd400; padding: 14px 20px 10px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.alert .hd b { font-size: 24px; font-weight: 800; }
+.alert .hd span { font-weight: 600; }
+.alert .meta { padding: 10px 20px 8px; border-bottom: 2px solid var(--line); font-size: 15px; color: var(--ink-2); display: flex; gap: 4px 24px; flex-wrap: wrap; }
+.alert .meta b { color: var(--ink); }
+.alert .bd { padding: 6px 20px 16px; columns: 2 320px; column-gap: 36px; }
+.alert .bd h3 { margin: 14px 0 4px; font-size: 16px; font-weight: 800; color: var(--brown); break-after: avoid; }
+.alert .bd p { margin: 6px 0; }
+.alert .bd ul { margin: 4px 0 8px; padding-left: 20px; }
+.alert .bd li { margin: 4px 0; break-inside: avoid; }
+.alert .ft { padding: 10px 20px; border-top: 2px solid var(--line); font-size: 14px; color: var(--ink-2); }
+#fmap { height: 520px; border-radius: 6px; }
+.base-light, .base-relief { filter: sepia(.45) saturate(.9) brightness(1.02); }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 18px; }
+.tiles .sign { padding: 16px 20px 14px; }
+.tiles .k { display: block; font-size: 13px; font-weight: 600; opacity: .85; letter-spacing: .04em; }
+.tiles .v { display: block; font-size: 24px; font-weight: 800; line-height: 1.15; margin-top: 2px; }
+.tiles .s { display: block; font-size: 14px; opacity: .85; }
+.today { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; }
+.today .sign { padding: 20px 24px; }
+.today h3 { margin: 0 0 10px; font-size: 18px; font-weight: 800; }
+.wnow { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+.wnow .t { font-size: 64px; font-weight: 800; line-height: .9; }
+.wnow ul { list-style: none; margin: 0; padding: 0; font-size: 16px; display: grid; gap: 2px; }
+.dial { background: var(--board); border: 2px solid var(--line); border-radius: 12px; padding: 16px 20px; display: flex; flex-direction: column; align-items: center; }
+.dial h3 { align-self: stretch; margin: 0 0 6px; font-size: 18px; font-weight: 800; }
+.dial svg { width: 100%; max-width: 320px; height: auto; }
+.dial p { margin: 6px 0 0; text-align: center; color: var(--ink-2); font-size: 15px; }
+.days { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+.day { background: var(--board); border: 2px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.day b { display: block; font-size: 15px; }
+.day .tt { font-size: 26px; font-weight: 800; line-height: 1.1; margin: 4px 0; }
+.day .tt small { font-size: 16px; color: var(--ink-2); font-weight: 600; }
+.day .r { display: inline-block; margin-top: 6px; padding: 2px 8px 0; border-radius: 4px; font-size: 13px; font-weight: 800; border: 1.5px solid var(--ink); }
+.day span { display: block; font-size: 14px; color: var(--ink-2); }
+dl.loc { margin: 0; display: grid; grid-template-columns: 200px 1fr; }
+dl.loc dt, dl.loc dd { margin: 0; padding: 10px 16px 8px; border-bottom: 1px solid var(--line); }
+dl.loc dt { font-weight: 800; }
+@media (max-width: 900px) { .tiles, .days { grid-template-columns: 1fr 1fr; } .today { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { #fmap { height: 420px; } dl.loc { grid-template-columns: 1fr; } dl.loc dt { border-bottom: 0; padding-bottom: 0; } .titlesign .stt { text-align: left; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="logo sign" href="04-ranger.html">
+      <svg width="34" height="38" viewBox="0 0 34 38" aria-hidden="true"><path d="M17 2c-2 6-9 10-9 19a9 9 0 0 0 18 0c0-4-2-7-4-9 0 3-1.5 5-3.5 5.5C20 12 19 7 17 2z" fill="#f2e8d1"/><path d="M17 36v-8M12 33l5-4 5 4" stroke="#4b3427" stroke-width="2" fill="none"/></svg>
+      <span><b>Bushfire Explorer</b><small>Live fire information · Australia</small></span>
+    </a>
+    <nav aria-label="Primary"><a href="04-ranger.html#top">Top fires</a><a href="04-ranger.html#states">By state</a><a href="#">Near me</a><a href="#">Sources</a></nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <p class="crumb"><a href="04-ranger.html#states">← Queensland</a></p>
+  <div class="titlesign sign">
+    <div><h1>Cloncurry bushfire</h1><p id="where"></p></div>
+    <div class="stt"><span>Status</span><b id="stt"></b></div>
+  </div>
+
+  <article class="alert" aria-labelledby="h-alert">
+    <div class="hd"><svg width="34" height="30" viewBox="0 0 16 14" aria-hidden="true"><path d="M8 1 15 13H1Z" fill="#ffd400" stroke="#1f201c" stroke-width="1.2" stroke-linejoin="round"/><path d="M8 5v4" stroke="#1f201c" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11" r=".9" fill="#1f201c"/></svg><b id="h-alert">Advice: Avoid Smoke</b><span id="hl"></span></div>
+    <div class="meta" id="meta"></div>
+    <div class="bd" id="bd"></div>
+    <div class="ft">This is the Queensland Fire Department’s warning, shown word for word.</div>
+  </article>
+
+  <div class="tiles" id="tiles"></div>
+
+  <section aria-labelledby="h-map">
+    <div class="shd"><h2 class="finger sign" id="h-map">Fire map</h2><p>Warning area, the reported fire location and satellite hotspots within 10 km over the last three days.</p></div>
+    <div class="noticeboard">
+      <div class="nb-top"><div class="tabs" role="group" aria-label="Basemap"><button type="button" aria-pressed="true">Terrain</button><button type="button" aria-pressed="false">Satellite</button></div><div class="toggles"><label><input type="checkbox" checked> Warning area</label><label><input type="checkbox" checked> Hotspots</label></div></div>
+      <div id="fmap" role="region" aria-label="Map of the Cloncurry fire"></div>
+      <div class="nb-bottom"><div class="keyl" id="keyl"></div></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-today">
+    <div class="shd"><h2 class="finger sign green" id="h-today">Conditions</h2><p id="condp"></p></div>
+    <div class="today">
+      <div class="sign green"><h3>At the fire now</h3><div class="wnow" id="wnow"></div></div>
+      <div class="dial"><h3>Fire danger today</h3><div id="dial"></div><p id="dialp"></p></div>
+    </div>
+    <div class="days" id="days"></div>
+  </section>
+
+  <section aria-labelledby="h-loc">
+    <div class="shd"><h2 class="finger sign" id="h-loc">About this location</h2><p>Satellite counts are hotspots within 10 km of the reported location.</p></div>
+    <div class="board"><dl class="loc" id="loc"></dl></div>
+  </section>
+</main>
+
+<footer><div class="wrap">
+  <div><p><strong>Bushfire Explorer is for information only.</strong> It does not replace official sources. Always follow advice and warnings from your state fire agency and emergency broadcaster. In an emergency call 000.</p></div>
+  <div class="s"><p>Weather by Open-Meteo, smoke from CAMS, fire danger from the Bureau of Meteorology via Esri, places from the ABS, vegetation from NVIS, hotspots from Geoscience Australia. Basemap: Esri.</p></div>
+</div></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="shared/geo.js"></script>
+<script src="shared/data.js"></script>
+<script src="shared/fire.js"></script>
+<script src="shared/kit.js"></script>
+<script src="shared/nav.js"></script>
+<script>
+(function () {
+  const { esc, num } = K, F = K.F, f = F.fire, w = F.weather, d = F.danger, cx = F.context, n = F.near, ex = f.extra || {};
+  const tri = (s) => `<svg width="${s}" height="${Math.round(s * .88)}" viewBox="0 0 16 14" aria-hidden="true"><path d="M8 1 15 13H1Z" fill="#ffd400" stroke="#1f201c" stroke-width="1.3" stroke-linejoin="round"/></svg>`;
+  document.getElementById('where').textContent = `${f.location} · Queensland · updated ${F.time(f.updated)} AEST`;
+  document.getElementById('stt').textContent = `${f.statusLabel} · not under control`;
+  document.getElementById('hl').textContent = f.headline;
+  document.getElementById('meta').innerHTML = `<span>Area: <b>${esc(ex['Warning area'])}</b></span><span>Issued: <b>${F.dateTime(ex['Warning issued'])} AEST</b></span>`;
+  document.getElementById('bd').innerHTML = F.blocks.map((b) => b.type === 'h' ? `<h3>${esc(b.text)}</h3>` : b.type === 'ul' ? `<ul>${b.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : `<p>${esc(b.text)}</p>`).join('');
+  document.getElementById('tiles').innerHTML = [['Fire size', 'Not reported', 'No mapped perimeter yet', ''], ['Crews', '7 vehicles', '1 on scene, 6 on the way', ''], ['Burning since', F.shortDate(f.started), F.time(f.started) + ' AEST', ''], ['Hotspots in 24 hours', n.count24, n.count72 + ' over 3 days', 'green']]
+    .map(([k, v, s, c]) => `<div class="sign ${c}"><span class="k">${k}</span><span class="v num">${v}</span><span class="s">${s}</span></div>`).join('');
+
+  const map = K.fireMap(document.getElementById('fmap'), {
+    bases: ['light', 'relief', 'labels'],
+    warn: { color: '#4b3427', weight: 2.5, dashArray: '8 5', fillColor: '#c47a26', fillOpacity: .1 },
+    hot: (h) => ({ radius: h.ageH < 24 ? 3.6 : 2.8, color: '#f2e8d1', weight: 1, fillColor: h.ageH < 3 ? '#a3301c' : h.ageH < 24 ? '#c47a26' : '#8a7a62', fillOpacity: 1 }),
+    fireIcon: () => L.divIcon({ className: 'mk', html: tri(30), iconSize: [30, 26], iconAnchor: [15, 18] }),
+  });
+  document.querySelector('.base-relief').style.mixBlendMode = 'multiply';
+  document.getElementById('keyl').innerHTML = `<span>${tri(15)} Fire (Advice)</span><span><svg width="22" height="8"><path d="M0 4h22" stroke="#f2e8d1" stroke-width="2" stroke-dasharray="6 4"/></svg> Warning area</span><span><svg width="10" height="10"><circle cx="5" cy="5" r="3.6" fill="#a3301c"/></svg> Under 3 h</span><span><svg width="10" height="10"><circle cx="5" cy="5" r="3.6" fill="#c47a26"/></svg> Under 24 h</span><span><svg width="10" height="10"><circle cx="5" cy="5" r="3" fill="#8a7a62"/></svg> Up to 3 days</span>`;
+
+  const arrow = (deg) => `<span style="display:inline-block;transform:rotate(${(deg + 180) % 360}deg)" aria-hidden="true">↑</span>`;
+  document.getElementById('condp').textContent = `Modelled for the fire’s location at ${F.time(w.now.time)} AEST.`;
+  document.getElementById('wnow').innerHTML = `<span class="t num">${Math.round(w.now.tempC)}°</span><ul><li>${w.now.text}</li><li>Humidity ${w.now.rh}%</li><li>Wind ${arrow(w.now.windDeg)} ${w.now.windDir} ${Math.round(w.now.windKmh)} km/h, gusts ${Math.round(w.now.gustKmh)}</li><li>Smoke now: ${w.aq.category} · peak today ${w.aq.forecast[0].category.toLowerCase()}</li></ul>`;
+
+  // roadside fire danger rating sign: semicircle with four bands and a pointer
+  (function () {
+    const R = ['Moderate', 'High', 'Extreme', 'Catastrophic'], cxp = 160, cyp = 150, r0 = 62, r1 = 128;
+    const pt = (r, a) => [cxp + r * Math.cos(a), cyp - r * Math.sin(a)];
+    let s = `<svg viewBox="0 0 320 178" role="img" aria-label="Fire danger rating today: ${d.days[0].rating}">`;
+    R.forEach((name, i) => {
+      const a0 = Math.PI - i * Math.PI / 4, a1 = Math.PI - (i + 1) * Math.PI / 4;
+      const [x0, y0] = pt(r1, a0), [x1, y1] = pt(r1, a1), [x2, y2] = pt(r0, a1), [x3, y3] = pt(r0, a0);
+      s += `<path d="M${x0} ${y0}A${r1} ${r1} 0 0 1 ${x1} ${y1}L${x2} ${y2}A${r0} ${r0} 0 0 0 ${x3} ${y3}Z" fill="${K.RATING_COLOR[name]}" stroke="#1f201c" stroke-width="1.5"/>`;
+      const am = (a0 + a1) / 2, [tx, ty] = pt((r0 + r1) / 2, am);
+      s += `<text x="${tx}" y="${ty + 4}" text-anchor="middle" font-family="Overpass, sans-serif" font-weight="800" font-size="${name === 'Catastrophic' ? 9.5 : 12}" fill="${name === 'Catastrophic' ? '#fff' : '#1f201c'}" transform="rotate(${90 - am * 180 / Math.PI} ${tx} ${ty})">${name.toUpperCase()}</text>`;
+    });
+    const idx = R.indexOf(d.days[0].rating), am = Math.PI - (idx + .5) * Math.PI / 4, [px, py] = pt(r1 - 6, am), [bx, by] = pt(10, am + Math.PI / 2), [cx2, cy2] = pt(10, am - Math.PI / 2);
+    s += `<path d="M${px} ${py}L${bx} ${by}L${cx2} ${cy2}Z" fill="#1f201c"/><circle cx="${cxp}" cy="${cyp}" r="14" fill="#1f201c"/><rect x="20" y="${cyp + 6}" width="280" height="20" rx="3" fill="#4b3427"/><text x="160" y="${cyp + 20}" text-anchor="middle" font-family="Overpass, sans-serif" font-weight="800" font-size="12" fill="#f2e8d1" letter-spacing="1">FIRE DANGER RATING</text></svg>`;
+    document.getElementById('dial').innerHTML = s;
+    document.getElementById('dialp').textContent = `${d.district} district: ${d.days[0].rating} today (fire behaviour index ${d.days[0].fbi}). ${d.tfb.text}`;
+  })();
+  document.getElementById('days').innerHTML = w.daily.map((x, i) => { const r = d.days[i]; return `<div class="day"><b>${i === 0 ? 'Today' : F.day(x.date)}</b><div class="tt num">${Math.round(x.tMaxC)}°<small> / ${Math.round(x.tMinC)}°</small></div><span>${x.text}, ${x.precipProb}% rain</span><span>${arrow(x.windDegDominant)} ${x.windDirDominant} ${Math.round(x.windMaxKmh)} km/h</span>${r ? `<span class="r" style="background:${K.RATING_COLOR[r.rating]}">${r.rating}</span>` : ''}</div>`; }).join('');
+  document.getElementById('loc').innerHTML = [['Nearest town', `${cx.nearestTown.name}, population ${num(cx.nearestTown.population)}. The fire is ${cx.nearestTown.distKm} km ${cx.nearestTown.fromTown} of town.`], ['Council', cx.lga + ' Shire'], ['Country', `${cx.vegetation.group}: ${cx.vegetation.subgroup.toLowerCase()}`], ['Remoteness', cx.remoteness], ['National park or reserve', 'None'], ['Satellite hotspots', `${n.count24} in 24 hours, ${n.count72} in 3 days. Latest ${F.time(n.latest)} AEST; peak ${Math.round(n.maxFrp)} MW.`], ['Incident number', esc(ex['Incident number'])], ['Coordinates', `${f.lat.toFixed(4)}, ${f.lon.toFixed(4)}`]]
+    .map(([t, v]) => `<dt>${t}</dt><dd>${v}</dd>`).join('');
+})();
+</script>
+</body>
+</html>
