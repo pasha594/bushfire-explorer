@@ -65,6 +65,8 @@ td a { font-weight: 600; }
 .opt-hd h2 { margin: 0; font: 600 clamp(26px, 3vw, 34px)/1.1 var(--serif); letter-spacing: -.01em; }
 .opt-hd .tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .opt-hd .open { margin-left: auto; font-weight: 700; white-space: nowrap; }
+.opt-hd .open a { font-weight: 700; }
+.cap { margin: 14px 0 6px; font: 700 13px/1.2 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-2); }
 .shots { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 14px; align-items: start; }
 .shots a { display: block; border: 1px solid var(--rule); background: var(--card); line-height: 0; }
 .shots a:hover { border-color: var(--accent); }
@@ -103,16 +105,16 @@ td a { font-weight: 600; }
   <h1>Ten directions for Bushfire Explorer</h1>
   <div class="intro">
     <div>
-      <p>Each option is a working homepage built on the same content as the live site: the map with its overlays, warning counts, the ranked fire list, current warnings and the state list. All figures are real, taken from a snapshot of the agency feeds at 10:44 am AEDT on Tuesday 10 November 2026.</p>
+      <p>Each option has two working pages built on the same content as the live site. The <b>homepage</b> has the map with its overlays, warning counts, the ranked fire list, current warnings and the states. The <b>fire page</b> shows one real fire, Cloncurry in Queensland, which has an Advice warning: the official warning text, map, crews, weather, smoke, fire danger, satellite hotspots and location. All figures come from a snapshot of the agency feeds at 10:44 am AEDT on Tuesday 10 November 2026.</p>
       <p>Six options keep today’s layout and change the type, colour and components. Four rearrange the page. Five are restrained enough to ship as they are; five are deliberately bolder. Each is shown in one colour mode; the one you choose gets its second mode next.</p>
     </div>
     <div class="how">
       <h2>How to review</h2>
       <ul>
-        <li>Open an option, then use the bar at the bottom left to step through the rest with ‹ and ›.</li>
-        <li>These work: the map’s Hotspots / Fire danger switch, paging the fire list, “Show all warnings”, the Atlas gazetteer and the Teletext page keys.</li>
+        <li>Open an option, then use the bar at the bottom left: <b>Home</b> and <b>Fire page</b> switch pages within the option; ‹ and › step to the same page in the next option.</li>
+        <li>These work: the homepage map’s Hotspots / Fire danger switch, paging the fire list, “Show all warnings”, links to the Cloncurry fire, the Atlas gazetteer, the Synoptic satellite switch and the Teletext page keys.</li>
         <li>Search boxes, filters and links are visual only.</li>
-        <li>Maps are drawn from embedded outlines rather than map tiles, so you can judge how each option styles the map. The production basemap each would use is noted below.</li>
+        <li>National maps are drawn from embedded outlines, and fire maps from a stitched basemap image, because this page can’t load live map tiles. Each option restyles them; the production basemap is noted below.</li>
       </ul>
     </div>
   </div>
@@ -139,11 +141,11 @@ td a { font-weight: 600; }
     <div class="grid">
       <div>
         <p><strong>What “not AI-generated” meant here.</strong> The competitor sites share a look: near-black ground, Inter-style type, glowing orange circles, rounded floating panels, emoji and pill badges. Every option here instead takes its form from a real Australian or public-information source: warning signage, topographic sheets, Bureau of Meteorology products, park signs, fire-appliance livery, print, atlases, transport boards and broadcast teletext. None uses Inter, glow effects or emoji.</p>
-        <p><strong>Not yet designed.</strong> State pages, the fire detail page, the sources dialog and the second colour mode. These follow once a direction is chosen.</p>
+        <p><strong>Not yet designed.</strong> State pages, the sources dialog, “Near me” and the second colour mode. These follow once a direction is chosen.</p>
       </div>
       <div>
-        <p><strong>Data.</strong> 186 incidents from the seven state and territory feeds (93 active, 28 under control, 65 planned burns), 13 Advice warnings, 12,018 satellite hotspots (maps show a 3,200-point sample) and today’s fire danger ratings for 139 districts. Collected by running bushfiremap.com’s own feed code.</p>
-        <p><strong>Files.</strong> Everything is in <code>design-options/</code> on the <code>claude/gallant-fermi-yu5hwi</code> branch. Each option is one HTML file using shared data and map helpers in <code>design-options/shared/</code>.</p>
+        <p><strong>Data.</strong> 186 incidents from the seven state and territory feeds (93 active, 28 under control, 65 planned burns), 13 Advice warnings, 12,018 satellite hotspots (maps show a 3,200-point sample) and today’s fire danger ratings for 139 districts. For Cloncurry: the Queensland Fire Department warning and incident record, Open-Meteo weather, CAMS smoke, Bureau of Meteorology fire danger, ABS and NVIS context, and 301 nearby hotspots. Collected by running bushfiremap.com’s own feed code.</p>
+        <p><strong>Files.</strong> Everything is in <code>design-options/</code> on the <code>claude/gallant-fermi-yu5hwi</code> branch. Each option is two HTML files (homepage and <code>-fire</code> page) sharing one stylesheet in <code>design-options/styles/</code>, with data and map helpers in <code>design-options/shared/</code>.</p>
       </div>
     </div>
   </section>
@@ -151,70 +153,70 @@ td a { font-weight: 600; }
 
 <script>
 const OPTIONS = [
-  { id: '01-public-notice', name: 'Public Notice', tone: 'Safe', layout: 'Reskin', mode: 'Light', type: 'Atkinson Hyperlegible Next',
+  { id: '01-public-notice', fire: 'The warning leads in the official Australian Warning System form, with the agency text under it. Status is three ruled steps.', name: 'Public Notice', tone: 'Safe', layout: 'Reskin', mode: 'Light', type: 'Atkinson Hyperlegible Next',
     pal: [['#0f1720', 'Ink'], ['#ffffff', 'Paper'], ['#ffd400', 'Advice'], ['#ff7f00', 'Watch and Act'], ['#d50032', 'Emergency'], ['#eff1f2', 'Panel']],
     concept: 'Uses the visual language Australians already learn from emergency information: Australian Warning System triangles and Fire Danger Rating colours, set in a typeface designed for readers with low vision.',
     why: ['A yellow “call Triple Zero (000)” strip sits above the masthead.', 'Warning levels are a ruled row of large numerals with the official triangles, not a row of cards.', 'Fire status is shown by shape (filled, half-filled, empty square), so it still works without colour.', 'States are a plain table with today’s highest fire danger rating.'],
     typeNote: '<b>Atkinson Hyperlegible Next</b> for everything. It was designed by the Braille Institute to keep similar letters (I, l, 1) distinct.',
     prod: 'Keep the current Esri Light Gray basemap. Dark mode inverts the ground and keeps the warning colours.',
     risk: 'Plain on purpose. It reads like a well-made government site, which may suit or may feel too official.' },
-  { id: '02-survey-sheet', name: 'Survey Sheet', tone: 'Safe', layout: 'Reskin', mode: 'Light', type: 'Barlow Semi Condensed, Source Serif 4 Italic',
+  { id: '02-survey-sheet', fire: 'Topographic basemap inside the neat line; the warning is set as the sheet’s marginal notes in two columns.', name: 'Survey Sheet', tone: 'Safe', layout: 'Reskin', mode: 'Light', type: 'Barlow Semi Condensed, Source Serif 4 Italic',
     pal: [['#1d1d1b', 'Ink'], ['#f8f8f4', 'Paper'], ['#dfe9cc', 'Vegetation'], ['#d2e4ef', 'Sea'], ['#2f6ea5', 'Water'], ['#d2321e', 'Red overprint']],
     concept: 'Laid out like a printed Geoscience Australia topographic map sheet: the title in the top margin, the map inside a neat line (the ruled frame around a printed map) with a graticule (latitude and longitude lines), a Reference column, and numbered map symbols keyed to an index table.',
     why: ['Every fire has a grid reference in degrees and minutes, e.g. Peckhams Rd at 29°09′S 152°32′E.', 'State boundaries are dash-dot lines, the coastline is blue, sea names are italic serif, as on printed maps.', 'An “Index to state sheets” mini-map replaces the state cards.', 'A scale bar and an edition date in the margin.'],
     typeNote: '<b>Barlow Semi Condensed</b> for labels and text, close to map lettering. <b>Source Serif 4 Italic</b> for water names and notes, following the cartographic convention.',
     prod: 'Pair with OpenTopoMap or Esri World Topographic tiles inside the same frame.',
     risk: 'Dense. The frame and margin column cost space on phones.' },
-  { id: '03-synoptic', name: 'Synoptic', tone: 'Safe', layout: 'Reskin', mode: 'Light', type: 'Sofia Sans, Sofia Sans Condensed, Red Hat Mono',
+  { id: '03-synoptic', fire: 'An observations strip, a 72-hour detection chart and a fire behaviour index chart; the forecast is a Bureau-style table.', name: 'Synoptic', tone: 'Safe', layout: 'Reskin', mode: 'Light', type: 'Sofia Sans, Sofia Sans Condensed, Red Hat Mono',
     pal: [['#0e2233', 'Navy ink'], ['#ffffff', 'Paper'], ['#dde7ef', 'Table band'], ['#1d5c99', 'Link blue'], ['#c62d1f', 'Fire red'], ['#e3a33b', 'Hotspot amber']],
     concept: 'Styled on Bureau of Meteorology data products: an issue line, observation tables with banded headers, small charts drawn to scale, and station-model symbols (the weather-map circle whose fill shows a value) where the fill shows how controlled a fire is.',
     why: ['A “hotspots by hour” chart shows the real satellite pass times in today’s data.', 'Warnings are grouped by state, like the Bureau’s warnings summary page.', 'Each state shows how its fire weather districts split across danger ratings.', 'Times use the Bureau’s day/time format, e.g. 10/8:38am.'],
     typeNote: '<b>Sofia Sans</b> for headings, <b>Sofia Sans Condensed</b> for tables, <b>Red Hat Mono</b> for figures and times.',
     prod: 'Esri Light Gray basemap. The summary row moves above the map; otherwise today’s layout.',
     risk: 'The most data-heavy option. Casual visitors may find it dry.' },
-  { id: '04-ranger', name: 'Ranger', tone: 'Bold', layout: 'Reskin', mode: 'Light', type: 'Overpass, Overpass Mono',
+  { id: '04-ranger', fire: 'A roadside Fire Danger Rating dial (the semicircle sign at park entrances), the warning as a park alert notice, and signs for crews and hotspots.', name: 'Ranger', tone: 'Bold', layout: 'Reskin', mode: 'Light', type: 'Overpass, Overpass Mono',
     pal: [['#4b3427', 'Sign brown'], ['#f2e8d1', 'Cream'], ['#34553b', 'Park green'], ['#c47a26', 'Ochre'], ['#e4e8df', 'Eucalypt grey'], ['#1f201c', 'Ink']],
     concept: 'National-park signage: brown routed-timber signs with a cream inset border and highway lettering, the map mounted on a timber noticeboard, and the states as fingerpost signs on a post.',
     why: ['A real sign component: brown panel, rounded corners, cream line inset from the edge.', 'The “By state” section is a fingerpost, with boards pointing either side of a post.', 'Warnings are yellow park alert notices.', 'Ranked fires appear on the map as small brown numbered signs.'],
     typeNote: '<b>Overpass</b>, an open-source typeface based on Highway Gothic, the lettering on road and park signs. <b>Overpass Mono</b> for sizes.',
     prod: 'A muted terrain basemap (Esri World Topographic, desaturated). Dark mode would be a dark-brown night version.',
     risk: 'Could feel like a theme park if pushed further. Brown is heavy in large areas.' },
-  { id: '05-hi-vis', name: 'Hi-Vis', tone: 'Bold', layout: 'Reskin', mode: 'Light', type: 'Big Shoulders Display, Libre Franklin',
+  { id: '05-hi-vis', fire: 'Only the warning block carries chevrons. Fire danger days are solid colour blocks with heavy numerals.', name: 'Hi-Vis', tone: 'Bold', layout: 'Reskin', mode: 'Light', type: 'Big Shoulders Display, Libre Franklin',
     pal: [['#111111', 'Black'], ['#ffd200', 'Signal yellow'], ['#d71920', 'Appliance red'], ['#ffffff', 'White'], ['#ececec', 'Grey']],
     concept: 'Fire-appliance livery: the Battenburg pattern (the yellow-and-red checks on emergency vehicles), rear chevrons on any count that is live, heavy condensed numerals, and fire status as solid colour blocks.',
     why: ['The chevron stripe appears only on warning counts above zero, so attention follows the data.', 'Rank numbers are set huge, like vehicle call numbers.', 'Statuses are solid blocks: red for out of control, yellow for being controlled.', 'The Battenburg band frames the masthead and the footer only.'],
     typeNote: '<b>Big Shoulders Display</b>, designed for City of Chicago signage, for headings and numbers. <b>Libre Franklin</b> for text.',
     prod: 'Esri Light Gray basemap. Dark mode is natural: the masthead is already black.',
     risk: 'Loud. Chevrons must stay reserved for real alerts or they become noise.' },
-  { id: '06-riso', name: 'Riso', tone: 'Bold', layout: 'Reskin', mode: 'Light', type: 'Archivo Expanded, Courier Prime',
+  { id: '06-riso', fire: 'The relief map is printed in blue ink with the warning area in orange halftone; the Advice level is rubber-stamped.', name: 'Riso', tone: 'Bold', layout: 'Reskin', mode: 'Light', type: 'Archivo Expanded, Courier Prime',
     pal: [['#2f4fa2', 'Riso Medium Blue'], ['#ff6c2f', 'Riso Orange'], ['#f0efe9', 'Paper'], ['#1f2a52', 'Text']],
     concept: 'A two-ink risograph print (a stencil printing process popular for zines): blue and fluorescent orange that multiply where they overlap, headings printed slightly out of register, halftone land on the map, paper grain and rubber-stamped warnings.',
     why: ['A plain-English summary sentence opens the page, written from the data.', 'Only two inks; every colour on the page is one ink, the other, or both overprinted.', 'Each state card carries its own silhouette with fires plotted.', 'Warning stamps sit at slightly different angles, as if stamped by hand.'],
     typeNote: '<b>Archivo</b> at its widest setting for headings and numbers. <b>Courier Prime</b> for labels and data.',
     prod: 'Tiles would be desaturated and tinted blue with a CSS filter, with fires multiplied on top. Dark mode is hard for a paper look; it would become a “blue paper” version.',
     risk: 'The playful print look may feel wrong during a major emergency.' },
-  { id: '07-atlas', name: 'Atlas', tone: 'Safe', layout: 'New layout', mode: 'Light', type: 'EB Garamond, Jost',
+  { id: '07-atlas', fire: 'A detail plate with its own tenth-of-a-degree grid, the warning as an atlas text page, and the forecast as an atlas climate table.', name: 'Atlas', tone: 'Safe', layout: 'New layout', mode: 'Light', type: 'EB Garamond, Jost',
     pal: [['#2b2a33', 'Ink'], ['#fdfdfb', 'Plate'], ['#d4e4ea', 'Sea'], ['#f4dcc7', 'WA tint'], ['#f2d3d7', 'Qld tint'], ['#d7e0f1', 'NSW tint'], ['#b3261e', 'Fire red']],
     concept: 'A reference-atlas plate. The map fills the page with soft political tints per state and a lettered and numbered grid in the margins. A gazetteer (an atlas index of places) lists every active fire alphabetically with its grid square. Statistics follow as notes and tables.',
     why: ['Grid squares (e.g. K6) tie every list back to the map.', 'Select a gazetteer entry and its fire is highlighted on the plate.', 'A legend cartouche and a scale bar computed from the map.', 'Numbers are set in a book serif with lining figures.'],
     typeNote: '<b>EB Garamond</b> for titles, place names and tables. <b>Jost</b>, a geometric sans in the Futura tradition, for labels.',
     prod: 'The plate stays at national scale; zooming in opens a tiled detail view.',
     risk: 'Grid references are a learned convention. The fixed national view needs a clear way into detail.' },
-  { id: '08-state-by-state', name: 'State by State', tone: 'Safe', layout: 'New layout', mode: 'Light', type: 'Schibsted Grotesk, Literata',
+  { id: '08-state-by-state', fire: 'Three same-scale mini-maps show how the hotspots moved over two days, followed by four equal day panels.', name: 'State by State', tone: 'Safe', layout: 'New layout', mode: 'Light', type: 'Schibsted Grotesk, Literata',
     pal: [['#16191b', 'Ink'], ['#f3f4f1', 'Page'], ['#ffffff', 'Panel'], ['#c4381a', 'Fire'], ['#e8953a', 'Hotspot'], ['#ffe46b', 'Highlight']],
     concept: 'Small multiples (a grid of identically built small charts). Australia has no national fire feed; each state publishes its own. So the page leads with eight equal state panels, each with its own map, counts, danger rating and top fires, under a one-sentence national summary.',
     why: ['The headline is a sentence written from the data, not a row of tiles.', 'Panels are ordered by active fires; each mini-map has its own scale bar.', 'The Northern Territory panel explains why it shows hotspots only.', 'The full table and warnings sit side by side below.'],
     typeNote: '<b>Literata</b> for the summary sentence. <b>Schibsted Grotesk</b>, made for a Norwegian news publisher, for everything else.',
     prod: 'National map on Esri Light Gray tiles; panel maps stay as vector outlines (fast, no tiles needed).',
     risk: 'The most conventional of the ten. Panels need equal heights as data changes.' },
-  { id: '09-departures', name: 'Departures', tone: 'Bold', layout: 'New layout', mode: 'Dark', type: 'Barlow Condensed, Barlow',
+  { id: '09-departures', fire: 'The fire as a flap-board detail screen; the warning text runs on an amber message sign.', name: 'Departures', tone: 'Bold', layout: 'New layout', mode: 'Dark', type: 'Barlow Condensed, Barlow',
     pal: [['#0e0f11', 'Ground'], ['#17191c', 'Board'], ['#2a2d31', 'Flap'], ['#f2efe6', 'Characters'], ['#f2b200', 'Signage yellow'], ['#ff6b4a', 'Out of control'], ['#7fc97f', 'Under control']],
     concept: 'The ranked fire list as a split-flap departures board (the mechanical boards in airports and stations): one flap per character, status in coloured text, warnings as a yellow flap. The flaps settle once when the page loads.',
     why: ['A wayfinding header with a pictogram and a flap clock.', 'Counters, warnings and states are all flap boards, so the metaphor holds across the page.', 'Long names are truncated as real boards do.', 'One animation on load and none after, which respects reduced-motion settings.'],
     typeNote: '<b>Barlow Condensed</b> for the flaps and labels, <b>Barlow</b> for text.',
     prod: 'Esri Dark Gray basemap. A light mode would keep the board dark and lighten the page around it.',
     risk: 'Truncated names need a tap for detail. The flap effect must stay a one-off.' },
-  { id: '10-teletext', name: 'Teletext', tone: 'Bold', layout: 'New layout', mode: 'Dark', type: 'VT323',
+  { id: '10-teletext', fire: 'Pages 310 to 313: a summary with a local mosaic map, the warning across subpages, conditions and location.', name: 'Teletext', tone: 'Bold', layout: 'New layout', mode: 'Dark', type: 'VT323',
     pal: [['#000000', 'Black'], ['#ff2b1c', 'Red'], ['#19e619', 'Green'], ['#ffff00', 'Yellow'], ['#1a1aff', 'Blue'], ['#ff2bff', 'Magenta'], ['#00ffff', 'Cyan'], ['#ffffff', 'White']],
     concept: 'Teletext pages (the text service broadcast on TV from the 1970s to the 2010s): a 40 × 25 character grid, eight colours, double-height banners, a mosaic map built from 2 × 3 block cells, numbered pages and the four coloured Fastext keys.',
     why: ['The mosaic map plots the real fires and hotspots.', 'Pages 302 to 305 work: use the coloured keys or type a page number.', 'The grid scales to fit a phone at 40 columns.', 'Strict palette: eight colours, no gradients, no shadows.'],
@@ -225,13 +227,13 @@ const OPTIONS = [
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 document.getElementById('ov').innerHTML = OPTIONS.map((o, i) => `<tr><td class="num">${String(i + 1).padStart(2, '0')}</td><td><a href="${o.id}.html">${o.name}</a></td><td><span class="tag${o.tone === 'Bold' ? ' bold' : ''}">${o.tone}</span></td><td>${o.layout}</td><td class="hide-s">${o.mode}</td><td class="hide-s">${o.type}</td><td><span class="sw" aria-hidden="true">${o.pal.slice(0, 6).map((p) => `<i style="background:${p[0]}"></i>`).join('')}</span></td></tr>`).join('');
 document.getElementById('options').innerHTML = OPTIONS.map((o, i) => `<section class="opt wrap" id="${o.id}" aria-labelledby="h-${o.id}">
-  <div class="opt-hd"><span class="no">${String(i + 1).padStart(2, '0')}</span><h2 id="h-${o.id}">${o.name}</h2><span class="tags"><span class="tag${o.tone === 'Bold' ? ' bold' : ''}">${o.tone}</span><span class="tag">${o.layout}</span><span class="tag">${o.mode}</span></span><a class="open" href="${o.id}.html">Open ${o.name} →</a></div>
-  <div class="shots">
-    <a href="${o.id}.html" aria-label="Open ${o.name}, desktop view"><img src="shots/${o.id}-desktop.jpg" width="1600" height="1000" alt="${o.name} homepage at desktop width" ${i > 1 ? 'loading="lazy"' : ''}></a>
-    <a href="${o.id}.html" class="ph" aria-label="Open ${o.name}, phone view"><img src="shots/${o.id}-phone.jpg" width="585" height="1266" alt="${o.name} homepage at phone width" ${i > 1 ? 'loading="lazy"' : ''}></a>
-  </div>
+  <div class="opt-hd"><span class="no">${String(i + 1).padStart(2, '0')}</span><h2 id="h-${o.id}">${o.name}</h2><span class="tags"><span class="tag${o.tone === 'Bold' ? ' bold' : ''}">${o.tone}</span><span class="tag">${o.layout}</span><span class="tag">${o.mode}</span></span><span class="open"><a href="${o.id}.html">Homepage →</a> &nbsp; <a href="${o.id}-fire.html">Fire page →</a></span></div>
+  ${['', '-fire'].map((sfx) => `<p class="cap">${sfx ? 'Fire page: Cloncurry, Queensland' : 'Homepage'}</p><div class="shots">
+    <a href="${o.id}${sfx}.html" aria-label="Open ${o.name} ${sfx ? 'fire page' : 'homepage'}, desktop view"><img src="shots/${o.id}${sfx}-desktop.jpg" width="1600" height="1000" alt="${o.name} ${sfx ? 'fire page' : 'homepage'} at desktop width" ${i > 1 || sfx ? 'loading="lazy"' : ''}></a>
+    <a href="${o.id}${sfx}.html" class="ph" aria-label="Open ${o.name} ${sfx ? 'fire page' : 'homepage'}, phone view"><img src="shots/${o.id}${sfx}-phone.jpg" width="585" height="1266" alt="${o.name} ${sfx ? 'fire page' : 'homepage'} at phone width" ${i > 1 || sfx ? 'loading="lazy"' : ''}></a>
+  </div>`).join('')}
   <div class="cols">
-    <div><h3>Idea</h3><p>${o.concept}</p><h3>Choices that make it specific</h3><ul>${o.why.map((w) => `<li>${w}</li>`).join('')}</ul></div>
+    <div><h3>Idea</h3><p>${o.concept}</p><h3>Choices that make it specific</h3><ul>${o.why.map((w) => `<li>${w}</li>`).join('')}</ul><h3 style="margin-top:12px">Fire page</h3><p>${o.fire}</p></div>
     <div><h3>Type</h3><p class="type">${o.typeNote}</p><h3>Colour</h3><div class="pal">${o.pal.map((p) => `<span><i style="background:${p[0]}"></i>${p[1]} <span class="num">${p[0]}</span></span>`).join('')}</div></div>
     <div><h3>In production</h3><p>${o.prod}</p><h3>Risk</h3><p>${o.risk}</p></div>
   </div>
