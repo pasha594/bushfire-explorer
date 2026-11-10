@@ -1,6 +1,4 @@
 User-agent: *
 Allow: /
-Disallow: /templates/
-Disallow: /tools/
 
 Sitemap: https://bushfiremap.com/sitemap.xml
