@@ -3416,18 +3416,62 @@ AUF.util = (function () {
   // Scroll-wheel zoom is always on (no click-to-activate). wheelPxPerZoomLevel smooths trackpad zooming.
   const map = L.map(mapEl, { zoomControl: true, minZoom: 3, maxZoom: 18, zoomSnap: 0.5, zoomDelta: 0.5, attributionControl: true, scrollWheelZoom: true, wheelPxPerZoomLevel: 90 });
   map.fitBounds(STATE_BOUNDS.ALL);
-  // Base map: a plain topographic look (shaded relief, muted land, quiet labels) that follows the page theme, like cornea's.
+  // Base map: a plain look (muted land, quiet labels, shaded relief) that follows the page theme, like cornea's.
   ['danger', 'extents', 'warnings', 'hotspots', 'nearhot', 'labels'].forEach((p, i) => { map.createPane(p); map.getPane(p).style.zIndex = 380 + i * 10; });
   map.getPane('labels').style.pointerEvents = 'none';
-  map.createPane('relief'); map.getPane('relief').style.zIndex = 210; map.getPane('relief').style.pointerEvents = 'none'; map.getPane('relief').style.mixBlendMode = 'multiply';
+  // Light and dark: OpenFreeMap vector tiles (OpenStreetMap data; free, no key, no usage limits) drawn by MapLibre GL
+  // through the maplibre-gl-leaflet bridge, with shaded relief from the AWS Terrain Tiles open dataset. MapLibre
+  // (~280 KB compressed) is fetched only when a light or dark map is first shown, after the page has painted.
+  // Without WebGL the map falls back to standard OpenStreetMap raster tiles.
+  const OFM = 'https://tiles.openfreemap.org/styles/';
+  const OFM_ATTR = '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
+  const DEM_ATTR = 'Terrain: Mapzen, AWS Open Data';
+  const hasWebGL = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; } })();
+  let glReady = null;
+  function loadGL() {
+    if (glReady) return glReady;
+    const add = (tag, attrs) => new Promise((res, rej) => { const el = Object.assign(document.createElement(tag), attrs); el.onload = res; el.onerror = () => rej(new Error('could not load ' + (attrs.src || attrs.href))); document.head.appendChild(el); });
+    // Wait for the page to finish loading and the browser to go idle, so MapLibre's parse doesn't hold up first paint.
+    const idle = new Promise(res => { const go = () => (window.requestIdleCallback ? requestIdleCallback(res, { timeout: 2500 }) : setTimeout(res, 200)); if (document.readyState === 'complete') go(); else window.addEventListener('load', go, { once: true }); });
+    glReady = idle.then(() => Promise.all([add('link', { rel: 'stylesheet', href: '/lib/maplibre-gl/maplibre-gl.css' }), add('script', { src: '/lib/maplibre-gl/maplibre-gl.js' })]))
+      .then(() => add('script', { src: '/lib/maplibre-gl-leaflet/leaflet-maplibre-gl.js' }));
+    glReady.catch(() => { glReady = null; }); // let a later theme switch retry
+    return glReady;
+  }
+  const osmFallback = () => L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors' });
+  function glBase(style, dark) {
+    const g = L.layerGroup(), ATTR = OFM_ATTR + ' · ' + DEM_ATTR;
+    let isGl = false; // the bridge layer doesn't report its attribution to Leaflet, so add it here while shown
+    g.on('remove', () => { if (isGl) map.attributionControl.removeAttribution(ATTR); });
+    g.on('add', () => {
+      if (isGl) map.attributionControl.addAttribution(ATTR);
+      if (g.getLayers().length) return; // built on first use; re-adding the group re-adds it
+      if (!hasWebGL) { osmFallback().addTo(g); return; }
+      loadGL().then(() => {
+        if (g.getLayers().length) return;
+        const gl = L.maplibreGL({ style: OFM + style, interactive: false, attributionControl: false });
+        gl.addTo(g); isGl = true;
+        if (map.hasLayer(g)) map.attributionControl.addAttribution(ATTR);
+        const m = gl.getMaplibreMap();
+        m.on('load', () => {
+          try {
+            const firstLabel = (m.getStyle().layers || []).find(l => l.type === 'symbol');
+            m.addSource('dem', { type: 'raster-dem', tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], encoding: 'terrarium', tileSize: 512, maxzoom: 13 }); // 256 px tiles read as 512: one zoom lower, a quarter of the bytes
+            m.addLayer({ id: 'relief', type: 'hillshade', source: 'dem', paint: dark
+              ? { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': 'rgba(0,0,0,0.55)', 'hillshade-highlight-color': 'rgba(255,255,255,0.06)', 'hillshade-accent-color': 'rgba(0,0,0,0.25)' }
+              : { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': 'rgba(70,50,40,0.35)', 'hillshade-highlight-color': 'rgba(255,255,255,0.3)', 'hillshade-accent-color': 'rgba(70,50,40,0.15)' } }, firstLabel && firstLabel.id);
+          } catch (e) { console.warn('[basemap relief]', e); }
+        });
+      }).catch(e => { console.warn('[basemap]', e); if (!g.getLayers().length) osmFallback().addTo(g); });
+    });
+    return g;
+  }
+  // Satellite: Esri World Imagery with Esri's place labels (each service's own copyrightText, …/MapServer?f=json).
   const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/', ESRI_ATTR = 'Powered by Esri · Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS user community';
-  // Each service's own copyrightText (…/MapServer?f=json).
-  const HILL_ATTR = 'Hillshade: Esri, Vantor, Airbus DS, USGS, NGA, NASA, CGIAR, N Robinson, NCEAS, NLS, OS, NMA, Geodatastyrelsen, Rijkswaterstaat, GSA, Geoland, FEMA, Intermap, and the GIS user community';
   const tl = (path, o) => L.tileLayer(ESRI + path + '/MapServer/tile/{z}/{y}/{x}', Object.assign({ maxZoom: 18, maxNativeZoom: 16 }, o));
   const BASE = {
-    // Light: grey canvas (land/water) with the hillshade multiplied in, so relief shows at every zoom. (World_Terrain_Base has no close-zoom tiles for Australia.)
-    light: L.layerGroup([tl('Canvas/World_Light_Gray_Base', { attribution: ESRI_ATTR }), tl('Elevation/World_Hillshade', { pane: 'relief', opacity: 0.55, attribution: HILL_ATTR }), tl('Canvas/World_Light_Gray_Reference', { pane: 'labels' })]),
-    dark: L.layerGroup([tl('Canvas/World_Dark_Gray_Base', { attribution: ESRI_ATTR }), tl('Elevation/World_Hillshade_Dark', { opacity: 0.55, attribution: HILL_ATTR }), tl('Canvas/World_Dark_Gray_Reference', { pane: 'labels' })]),
+    light: glBase('positron', false),
+    dark: glBase('dark', true),
     sat: L.layerGroup([tl('World_Imagery', { maxNativeZoom: 18, attribution: 'Imagery: Esri, Vantor, Earthstar Geographics, and the GIS User Community' }), tl('Canvas/World_Dark_Gray_Reference', { pane: 'labels', attribution: ESRI_ATTR })]),
   };
   const isDark = () => { const t = document.documentElement.getAttribute('data-theme'); return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };

@@ -46,7 +46,7 @@ GitHub Pages must be set to deploy from GitHub Actions: **Settings → Pages →
 | Fire danger ratings | Australian Fire Danger Rating System, Bureau of Meteorology data via Esri Australia · state Total Fire Ban feeds |
 | Weather and air quality | [Open-Meteo](https://open-meteo.com) (CC BY 4.0), including CAMS air quality |
 | Location context | Australian Bureau of Statistics (ASGS), NVIS vegetation and CAPAD protected areas (DCCEEW) |
-| Base map | Esri (World Light/Dark Gray Canvas, World Hillshade, World Imagery) |
+| Base map | [OpenFreeMap](https://openfreemap.org) (© OpenMapTiles, data © OpenStreetMap contributors), shaded relief from AWS Terrain Tiles (Mapzen); satellite view: Esri World Imagery |
 
 Most data is licensed CC BY 4.0. Some sources (SA CFS, Emergency WA, DBCA) carry non-commercial or no-derivatives terms. The site is non-commercial and shows agency warning text unaltered. The NT doesn't publish a reusable incident feed, so NT fires appear as satellite hotspots and NAFI burnt areas only.
 
