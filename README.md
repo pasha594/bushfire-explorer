@@ -25,7 +25,8 @@ Old `#/state/xx` links redirect to `/xx/` in the browser.
 | `templates/page.html` | Page shell shared by every page |
 | `tools/build.mjs` | Builds the site into `dist/`: copies `public/` and `src/`, and generates the home page, `/fires-near-me/`, the state pages and `sitemap.xml` from the template |
 | `public/` | Files published as they are: `404.html`, `robots.txt`, `CNAME`, icons and link-preview image (`assets/`), `manifest.webmanifest`, Leaflet 1.9.4 and Leaflet.markercluster 1.5.3 (`lib/`), and the IndexNow key file (lets the site notify Bing and other engines of changed URLs) |
-| `.github/workflows/pages.yml` | Builds on every push and pull request; deploys `dist/` to GitHub Pages on pushes to `main` |
+| `.github/workflows/pages.yml` | Builds on every push and pull request; deploys `dist/` to GitHub Pages on pushes to `main`, then submits pages whose text changed to IndexNow |
+| `tools/indexnow.mjs` | IndexNow diff and submit (tells Bing and other engines, not Google, which pages changed) |
 
 ### Build and deploy
 
