@@ -3413,8 +3413,55 @@ AUF.util = (function () {
 
   // ---------- map (one instance, moved between views) ----------
   const mapEl = $('#map');
-  // Scroll-wheel zoom is always on (no click-to-activate). wheelPxPerZoomLevel smooths trackpad zooming.
-  const map = L.map(mapEl, { zoomControl: true, minZoom: 3, maxZoom: 18, zoomSnap: 0.5, zoomDelta: 0.5, attributionControl: true, scrollWheelZoom: true, wheelPxPerZoomLevel: 90 });
+  // Scroll-wheel zoom is always on (no click-to-activate), through SmoothWheel below rather than Leaflet's own handler.
+  const map = L.map(mapEl, { zoomControl: true, minZoom: 3, maxZoom: 18, zoomSnap: 0.5, zoomDelta: 0.5, attributionControl: true, scrollWheelZoom: false });
+  // Leaflet's wheel zoom moves in animated steps and ignores the wheel while a step animates, so continuous scrolling
+  // crawled. This handler follows the wheel or trackpad every frame instead, keeping the point under the pointer fixed.
+  // It drives the map the way Leaflet's own pinch zoom does (_moveStart, _move with pinch, _moveEnd), so tiles, the
+  // MapLibre base map, markers and vector layers all follow it.
+  const SmoothWheel = L.Handler.extend({
+    addHooks() { L.DomEvent.on(this._map.getContainer(), 'wheel', this._onWheel, this); },
+    removeHooks() { L.DomEvent.off(this._map.getContainer(), 'wheel', this._onWheel, this); this._end(); },
+    _onWheel(e) {
+      const m = this._map;
+      L.DomEvent.preventDefault(e); // the page doesn't scroll while the pointer is over the map
+      const px = e.deltaY * (e.deltaMode === 1 ? 20 : e.deltaMode === 2 ? 60 : 1);
+      if (!px || m._animatingZoom) return;
+      if (!this._on) {
+        this._on = true; m._stop();
+        this._zoom = this._goal = m.getZoom();
+        m._moveStart(true, false);
+        this._raf = L.Util.requestAnimFrame(this._frame, this);
+      }
+      // 150 px of scrolling is one zoom level, so a mouse-wheel notch (about 100 px) is two thirds of one; a trackpad
+      // pinch arrives as small ctrl+wheel deltas, so it gets a higher rate.
+      const dz = Math.max(-0.75, Math.min(0.75, -px / (e.ctrlKey ? 40 : 150)));
+      this._goal = Math.max(m.getMinZoom(), Math.min(m.getMaxZoom(), this._goal + dz));
+      this._pt = m.mouseEventToContainerPoint(e);
+      this._ll = m.containerPointToLatLng(this._pt);
+      this._last = performance.now();
+    },
+    _frame() {
+      const m = this._map, d = this._goal - this._zoom;
+      if (d) {
+        this._zoom = Math.abs(d) < 0.003 ? this._goal : this._zoom + d * 0.3;
+        const c = m.unproject(m.project(this._ll, this._zoom).subtract(this._pt.subtract(m.getSize().divideBy(2))), this._zoom);
+        m._move(c, this._zoom, { pinch: true });
+      }
+      // Stay active through short pauses in the gesture (trackpad momentum) so the map settles once, not per event.
+      if (d || performance.now() - this._last < 180) this._raf = L.Util.requestAnimFrame(this._frame, this);
+      else this._end();
+    },
+    _end() {
+      if (!this._on) return;
+      this._on = false; L.Util.cancelAnimFrame(this._raf);
+      this._map.fire('zoom'); // a plain zoom event lets tile layers drop the tiles of the zoom level they left
+      this._map._moveEnd(true);
+    },
+  });
+  map.addHandler('smoothWheel', SmoothWheel).smoothWheel.enable();
+  // Popups pan clear of the place search box in the top-right corner.
+  L.Popup.mergeOptions({ autoPanPaddingTopLeft: L.point(12, 64) });
   map.fitBounds(STATE_BOUNDS.ALL);
   // Base map: a plain look (muted land, quiet labels, shaded relief) that follows the page theme, like cornea's.
   ['danger', 'extents', 'warnings', 'hotspots', 'nearhot', 'labels'].forEach((p, i) => { map.createPane(p); map.getPane(p).style.zIndex = 380 + i * 10; });
@@ -3495,23 +3542,35 @@ AUF.util = (function () {
   }
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { setBase(); drawMap(true); });
   const hotR = L.canvas({ pane: 'hotspots', padding: 0.3 }), nearR = L.canvas({ pane: 'nearhot', padding: 0.3 });
-  const L_danger = L.layerGroup().addTo(map), L_ext = L.layerGroup().addTo(map), L_warn = L.layerGroup().addTo(map), L_hot = L.layerGroup().addTo(map), L_near = L.layerGroup().addTo(map), L_pins = L.layerGroup().addTo(map);
-  // Nearby fires and warnings merge into one counted circle when zoomed out; the ring shows the highest warning inside.
-  function clusterIcon(cl) {
-    const kids = cl.getAllChildMarkers(), n = kids.length;
-    const top = kids.reduce((m, k) => Math.max(m, k.options.alertRank || 0), 0);
-    const allRx = kids.every(k => k.options.cat === 'planned'), allCtl = kids.every(k => k.options.cat === 'controlled');
-    const d = Math.round(30 + Math.min(16, Math.log2(n) * 4));
-    return L.divIcon({ className: 'clu-wrap', iconSize: [d, d], html: `<div class="clu${allRx ? ' rx' : allCtl ? ' ctl' : ''}${top ? ' lv' + top : ''}" style="width:${d}px;height:${d}px"><span>${n}</span></div>` });
-  }
-  const L_cluster = (L.markerClusterGroup ? L.markerClusterGroup({ maxClusterRadius: 44, disableClusteringAtZoom: 9, spiderfyOnMaxZoom: true, showCoverageOnHover: false, chunkedLoading: true, iconCreateFunction: clusterIcon, animate: !matchMedia('(prefers-reduced-motion: reduce)').matches }) : L.layerGroup()).addTo(map);
-  let scarLayer = null, satOn = false;
+  // Every fire and warning gets its own pin at every zoom (no grouping); pin z-order puts warnings and active fires on top.
+  // L_place holds the searched-place pin, which outlives redraws.
+  const L_danger = L.layerGroup().addTo(map), L_ext = L.layerGroup().addTo(map), L_warn = L.layerGroup().addTo(map), L_hot = L.layerGroup().addTo(map), L_near = L.layerGroup().addTo(map), L_fires = L.layerGroup().addTo(map), L_pins = L.layerGroup().addTo(map), L_place = L.layerGroup().addTo(map);
+  // Satellite is the default view each visit; the Satellite switch turns it off for the plain light or dark map.
+  let scarLayer = null, satOn = true;
   setBase();
   function mountMap(slot) {
     if (!slot) { $('#mapholder').appendChild(mapEl); return; }
     if (mapEl.parentNode !== slot) slot.appendChild(mapEl);
     map.invalidateSize();
   }
+  // Map credits show when the page loads, then fold behind an "i" button on the first touch, click, drag, scroll or key
+  // press on the map, or after 6 seconds, so they don't cover the map. The button opens and closes them.
+  (function foldCredits() {
+    const attr = map.attributionControl.getContainer(), corner = attr.parentNode;
+    attr.id = 'map-credits';
+    const btn = L.DomUtil.create('button', 'attr-btn', corner);
+    btn.type = 'button'; btn.textContent = 'i'; btn.setAttribute('aria-controls', 'map-credits');
+    L.DomEvent.disableClickPropagation(btn);
+    const set = (open) => { corner.classList.toggle('attr-open', open); btn.setAttribute('aria-expanded', String(open)); btn.title = open ? 'Hide map credits' : 'Map credits'; btn.setAttribute('aria-label', btn.title); };
+    const AUTO = ['pointerdown', 'wheel', 'keydown'];
+    let timer = 0;
+    const stopAuto = () => { clearTimeout(timer); AUTO.forEach(t => mapEl.removeEventListener(t, onUse, true)); };
+    function onUse(e) { if (e && e.target && corner.contains(e.target)) return; stopAuto(); set(false); } // using the credits' own links doesn't fold them
+    btn.onclick = () => { stopAuto(); set(!corner.classList.contains('attr-open')); };
+    set(true);
+    timer = setTimeout(onUse, 6000);
+    AUTO.forEach(t => mapEl.addEventListener(t, onUse, { capture: true, passive: true }));
+  })();
 
   // ---------- data loading (unchanged behaviour: per-adapter refresh, keep-last-good) ----------
   async function runAdapter(ad) {
@@ -3863,6 +3922,16 @@ AUF.util = (function () {
   document.addEventListener('focusout', e => { if (e.target.id === 'rq') composing = false; if (renderDeferred && (e.target.id === 'overlay' || e.target.id === 'rq' || e.target.id === 'nq')) scheduleRender(); });
 
   // ---------- shared components ----------
+  // NAFI colours each burnt area by the month it burnt: the fsm_current palette (read from its WMS images in November
+  // 2026), with the label colour that reads best on each swatch.
+  const SCAR_MONTHS = [['#826482', '#fff'], ['#6e82a5', '#1d1a10'], ['#374b37', '#fff'], ['#46af91', '#1d1a10'], ['#33ff99', '#1d1a10'], ['#33ff33', '#1d1a10'],
+    ['#338433', '#fff'], ['#ffff00', '#1d1a10'], ['#ff964b', '#1d1a10'], ['#ff80ff', '#1d1a10'], ['#a03ca0', '#fff'], ['#320032', '#fff']];
+  const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  function scarLegend() {
+    const n = Number(todayIn('Australia/Darwin').slice(5, 7)); // the layer covers this calendar year, so January to now
+    const label = `Colour key: burnt areas are coloured by the month they burnt, ${n > 1 ? 'January to ' : ''}${MONTH_NAMES[n - 1]}`;
+    return `<span class="lg-scar"><span>Burnt in</span><span class="scarbar" role="img" aria-label="${esc(label)}">${SCAR_MONTHS.slice(0, n).map(([bg, ink], i) => `<i style="background:${bg};color:${ink}" title="${MONTH_NAMES[i]}" aria-hidden="true">${MONTH_NAMES[i][0]}</i>`).join('')}</span><span class="lg-note">Northern Australia · NAFI</span></span>`;
+  }
   function mapCard(opts) {
     const o = S.ui;
     const st = opts.st;
@@ -3870,14 +3939,18 @@ AUF.util = (function () {
     S.fires.forEach(f => { if (!st || f.state === st) n[cat(f)]++; });
     const overlayOpts = [['hotspots', 'Hotspots'], ['danger', 'Fire danger'], ['scars', 'Burnt areas this year (N. Aust.)'], ['none', 'Basemap']].map(([v, l]) => `<option value="${v}"${o.overlay === v ? ' selected' : ''}>${l}</option>`).join('');
     const dayBtns = o.overlay === 'danger' ? `<div class="daypick"><span class="lbl">Fire danger for</span>${[1, 2, 3, 4].map(d => `<button type="button" data-day="${d}" aria-pressed="${o.dangerDay === d}">${['Today', 'Tomorrow', 'Day 3', 'Day 4'][d - 1]}</button>`).join('')}</div>` : '';
+    const warnKey = `<span>${awsSvg('advice', 14)}Advice</span><span>${awsSvg('watch_act', 14)}Watch and Act</span><span>${awsSvg('emergency', 14)}Emergency</span>`;
     const legend = o.overlay === 'danger'
       ? ['Moderate', 'High', 'Extreme', 'Catastrophic'].map(r => `<span><i style="background:${M.danger ? M.danger.ratingColor(r) : '#ccc'}"></i>${r}</span>`).join('')
-      : `<span><span class="lg-clu">3</span>Group of fires (zoom in)</span><span>${awsSvg('advice', 14)}Advice</span><span>${awsSvg('watch_act', 14)}Watch and Act</span><span>${awsSvg('emergency', 14)}Emergency</span>${o.overlay === 'hotspots' ? '<span><i style="background:var(--hot1);border-radius:50%"></i>Hotspot &lt;3 h</span><span><i style="background:var(--hot3);border-radius:50%"></i>&lt;24 h</span><span><i style="background:#b39a76;border-radius:50%"></i>24–72 h</span>' : ''}`;
+      : o.overlay === 'scars' ? scarLegend() + warnKey
+      : warnKey + (o.overlay === 'hotspots' ? '<span><i style="background:var(--hot1);border-radius:50%"></i>Hotspot &lt;3 h</span><span><i style="background:var(--hot3);border-radius:50%"></i>&lt;24 h</span><span><i style="background:#b39a76;border-radius:50%"></i>24–72 h</span>' : '');
+    // Fire and warning maps have no category chips; they still get the key when an overlay needs one to be read.
+    const legendOnly = opts.noChips && (o.overlay === 'scars' || o.overlay === 'danger');
     return `<div class="mapcard${opts.cls ? ' ' + opts.cls : ''}">
       <div class="mapbar"><label class="lbl" for="overlay">Overlay</label><select class="pillsel" id="overlay">${overlayOpts}</select>
         <div class="sw-row"><label class="sw" title="Mapped fire boundaries: the area burnt so far">Perimeters <input type="checkbox" id="sw-ext"${o.extents ? ' checked' : ''}></label><label class="sw">Warning areas <input type="checkbox" id="sw-warn"${o.warnAreas ? ' checked' : ''}></label><label class="sw">Satellite <input type="checkbox" id="sw-sat"${satOn ? ' checked' : ''}></label></div></div>
       <div class="mapslot${opts.short ? ' short' : ''}"></div>
-      ${opts.noChips ? '' : `<div class="mapfoot"><button type="button" class="chip wild" data-show="active" aria-pressed="${o.show.active}">${n.active} active fire${n.active === 1 ? '' : 's'}</button><button type="button" class="chip ctrl" data-show="controlled" aria-pressed="${o.show.controlled}">${n.controlled} under control</button><button type="button" class="chip rx" data-show="planned" aria-pressed="${o.show.planned}">${n.planned} planned burn${n.planned === 1 ? '' : 's'}</button><div class="legend-inline">${legend}</div></div>`}
+      ${opts.noChips ? (legendOnly ? `<div class="mapfoot"><div class="legend-inline">${legend}</div></div>` : '') : `<div class="mapfoot"><button type="button" class="chip wild" data-show="active" aria-pressed="${o.show.active}">${n.active} active fire${n.active === 1 ? '' : 's'}</button><button type="button" class="chip ctrl" data-show="controlled" aria-pressed="${o.show.controlled}">${n.controlled} under control</button><button type="button" class="chip rx" data-show="planned" aria-pressed="${o.show.planned}">${n.planned} planned burn${n.planned === 1 ? '' : 's'}</button><div class="legend-inline">${legend}</div></div>`}
       ${opts.tabs ? `<div class="tabs2" role="group" aria-label="Map view"><button type="button" data-tab="now" aria-pressed="${o.overlay !== 'danger'}">${ICON.eye} Right Now</button><button type="button" data-tab="forecast" aria-pressed="${o.overlay === 'danger'}">${ICON.bino} Forecast</button></div>` : ''}
       ${dayBtns}
     </div>`;
@@ -4200,7 +4273,7 @@ AUF.util = (function () {
   map.on('popupopen', (e) => {
     if (++popupsThisRoute > 20) return; // cap per route view
     const src = e.popup && e.popup._source, o = (src && src.options) || {};
-    const kind = o.cat === 'warning' ? 'warning' : o.cat ? 'fire' : o.renderer === hotR ? 'hotspot' : o.renderer === nearR ? 'hotspot_near' : o.pane === 'danger' ? 'danger_district' : o.pane === 'extents' ? 'perimeter' : 'other';
+    const kind = o.place ? 'searched_place' : o.cat === 'warning' ? 'warning' : o.cat ? 'fire' : o.renderer === hotR ? 'hotspot' : o.renderer === nearR ? 'hotspot_near' : o.pane === 'danger' ? 'danger_district' : o.pane === 'extents' ? 'perimeter' : 'other';
     track('map_popup_opened', { kind, fire_uid: kind === 'fire' ? o.uid : null, warning_uid: kind === 'warning' ? o.uid : null, overlay: S.ui.overlay });
   });
   const mapInput = (input) => () => { if (mapTouched) return; mapTouched = true; track('map_interacted', { input, overlay: S.ui.overlay }); };
@@ -4212,17 +4285,16 @@ AUF.util = (function () {
     const r = S.route, st = r.view === 'state' ? r.st : null;
     const sel = r.view === 'fire' ? S.fireByUid.get(r.uid) : null;
     const selW = r.view === 'warning' ? S.warnings.find(w => w.uid === r.uid) : null;
-    L_pins.clearLayers(); L_cluster.clearLayers(); L_warn.clearLayers(); L_ext.clearLayers(); L_hot.clearLayers();
-    const clustered = [];
+    L_pins.clearLayers(); L_fires.clearLayers(); L_warn.clearLayers(); L_ext.clearLayers(); L_hot.clearLayers();
     setBase();
     // Pins: on fire pages show every fire nearby (so context is visible) and highlight the selected one.
     const fires = sel ? S.fires.filter(f => f.uid === sel.uid || cat(f) !== 'controlled' || f.alert) : mapFires(st);
     fires.forEach(f => {
       const isSel = sel && f.uid === sel.uid, p = pinSvg(f, isSel);
       const zo = (ALERT_RANK[f.alert] || 0) * 1000 + (STATUS_RANK[f.status] || 0) * 100 + (isSel ? 9000 : 0) + Math.round(Math.log10(1 + (f.sizeHa || 0)) * 10);
-      const mk = L.marker([f.lat, f.lon], { icon: L.divIcon({ className: 'pin' + (isSel ? ' sel' : ''), html: p.html, iconSize: [p.w, p.h], iconAnchor: [p.w / 2, p.h - 1], popupAnchor: [0, -p.h + 4] }), zIndexOffset: zo, title: prettyName(f.name), keyboard: false, alertRank: ALERT_RANK[f.alert] || 0, cat: cat(f), uid: f.uid })
+      const mk = L.marker([f.lat, f.lon], { icon: L.divIcon({ className: 'pin' + (isSel ? ' sel' : ''), html: p.html, iconSize: [p.w, p.h], iconAnchor: [p.w / 2, p.h - 1], popupAnchor: [0, -p.h + 4] }), zIndexOffset: zo, title: prettyName(f.name), keyboard: false, cat: cat(f), uid: f.uid })
         .bindPopup(() => popupFor(f));
-      if (isSel) mk.addTo(L_pins); else clustered.push(mk);
+      mk.addTo(isSel ? L_pins : L_fires);
       if (S.ui.warnAreas && f.warningGeometry && f.alert) L.geoJSON(f.warningGeometry, { pane: 'warnings', interactive: false, style: { color: AWS_COL[f.alert], weight: 2, dashArray: '5 4', fillColor: AWS_COL[f.alert], fillOpacity: 0.08 } }).addTo(L_warn);
       if (S.ui.extents && f.geometry) L.geoJSON(f.geometry, { pane: 'extents', interactive: false, style: { color: isSel ? '#e2482a' : '#c8401c', weight: isSel ? 2.5 : 1.5, fillColor: '#c8401c', fillOpacity: isSel ? 0.3 : 0.2 } }).addTo(L_ext);
     });
@@ -4233,11 +4305,10 @@ AUF.util = (function () {
       if (S.ui.warnAreas && g.type !== 'Point') L.geoJSON(g, { pane: 'warnings', interactive: false, style: { color: AWS_COL[w.alert], weight: 2, dashArray: '5 4', fillColor: AWS_COL[w.alert], fillOpacity: 0.08 } }).addTo(L_warn);
       if (linkedFire(w) && !selW) return;
       const pt = U.firstPoint(g); if (!pt) return;
-      const wm = L.marker([pt[1], pt[0]], { icon: L.divIcon({ className: 'pin', html: awsSvg(w.alert, 22), iconSize: [22, 20], iconAnchor: [11, 13] }), zIndexOffset: 800, title: w.title || '', alertRank: ALERT_RANK[w.alert] || 0, cat: 'warning', uid: w.uid })
+      const wm = L.marker([pt[1], pt[0]], { icon: L.divIcon({ className: 'pin', html: awsSvg(w.alert, 22), iconSize: [22, 20], iconAnchor: [11, 13] }), zIndexOffset: 800, title: w.title || '', cat: 'warning', uid: w.uid })
         .bindPopup(`<div class="pop"><h5>${esc(w.title || ALERT_TXT[w.alert])}</h5><div class="meta"><span class="stag">${w.state}</span>${esc(ALERT_TXT[w.alert])}</div><a class="go" href="${warnHref(w)}">View warning →</a></div>`);
-      if (selW) wm.addTo(L_pins); else clustered.push(wm);
+      wm.addTo(selW ? L_pins : L_fires);
     });
-    if (L_cluster.addLayers) L_cluster.addLayers(clustered); else clustered.forEach(m => L_cluster.addLayer(m));
     // National extents not matched to a listed fire
     if (S.ui.extents && S.extents) {
       S.extents.features.forEach(ft => {
@@ -4253,7 +4324,7 @@ AUF.util = (function () {
     }
     // Overlays
     if (S.ui.overlay === 'hotspots' && S.hotspots) L_hot.addLayer(hotLayer(st));
-    drawDanger(); drawScars();
+    drawDanger(); drawScars(); drawPlace();
     if (!sel || nearUid !== sel.uid) { L_near.clearLayers(); nearUid = null; } // never show another fire's hotspots
     const here = r.view === 'near' && S.near;
     if (here) {
@@ -4309,6 +4380,140 @@ AUF.util = (function () {
     if (!o) return;
     scarLayer = L.tileLayer.wms(o.url, { layers: o.layers, styles: o.styles || '', format: o.format || 'image/png', transparent: true, opacity: o.opacity || 0.7, attribution: o.attribution || '', pane: 'danger' }).addTo(map);
   }
+
+  // ---------- map search: a town, suburb, postcode or coordinates, pinned with the distance to the nearest fire ----------
+  // Places come from the ABS 2021 Suburbs and Localities (every named locality in Australia, ranked by population) and
+  // postcode points, both public ArcGIS layers that allow browser requests, like the ABS town search on /fires-near-me/.
+  // Search text and places are never sent to analytics.
+  const ABS_SAL = 'https://geo.abs.gov.au/arcgis/rest/services/Hosted/ABS_Socio_Economic_Indexes_for_Areas_SEIFA_by_2021_SAL/FeatureServer/0';
+  const ABS_POA = 'https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/POA/MapServer/2';
+  async function findPlaces(q) {
+    q = q.trim();
+    const c = q.match(/^(-?\d{1,2}(?:\.\d+)?)\s*[,\s]\s*(-?\d{2,3}(?:\.\d+)?)$/);
+    if (c) {
+      const lat = -Math.abs(+c[1]), lon = +c[2]; // all of Australia is south of the equator, so "33.9, 151.2" means -33.9
+      return { kind: 'coordinates', hits: lat >= -44.5 && lat <= -9 && lon >= 112 && lon <= 154.5 ? [{ lat, lon, label: lat.toFixed(4) + ', ' + lon.toFixed(4), sub: '' }] : [] };
+    }
+    if (/^\d{4}$/.test(q)) {
+      const j = await U.arcgisQuery(ABS_POA, { where: `poa_code_2021='${q}'`, outFields: 'poa_code_2021', returnGeometry: 'true', f: 'json' }, { timeout: 10000 });
+      const g = j && j.features && j.features[0] && j.features[0].geometry, pt = g && (g.points ? g.points[0] : g.x != null ? [g.x, g.y] : null);
+      return { kind: 'postcode', hits: pt ? [{ lat: pt[1], lon: pt[0], label: 'Postcode ' + q, sub: '' }] : [] };
+    }
+    const s = q.split(',')[0].replace(/[^A-Za-z0-9 '\-.()]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40).toUpperCase(); // "Katoomba, NSW" searches "Katoomba"
+    if (s.replace(/[^A-Z]/g, '').length < 2) return { kind: 'place', hits: [] };
+    const j = await U.arcgisQuery(ABS_SAL, { where: `UPPER(sal_name_2021) LIKE '${s.replace(/'/g, "''")}%'`, outFields: 'sal_code_2021,sal_name_2021,urp', returnGeometry: 'false', returnCentroid: 'true', orderByFields: 'urp DESC', resultRecordCount: '6', f: 'json' }, { timeout: 10000 });
+    return { kind: 'place', hits: ((j && j.features) || []).filter(x => x.centroid && x.attributes).map(x => {
+      // ABS names repeated across Australia carry their area and state: "Springfield (Central Coast - NSW)".
+      const a = x.attributes, m = String(a.sal_name_2021).match(/^(.*?) \((.*)\)$/), st = UCL_STATE[String(a.sal_code_2021).charAt(0)] || null;
+      const area = m ? m[2].replace(/\s*-?\s*\b(NSW|Vic\.|Qld|SA|WA|Tas\.|NT|ACT|OT)$/, '').trim() : '';
+      return { lat: x.centroid.y, lon: x.centroid.x, label: m ? m[1] : String(a.sal_name_2021), sub: [area, st].filter(Boolean).join(', ') };
+    }) };
+  }
+  // Nearest fire among the pins on the map (the category chips apply), not counting planned burns.
+  function nearestFire(lat, lon) {
+    let best = null;
+    mapFires(null).forEach(f => {
+      if (cat(f) === 'planned' || !isFinite(f.lat) || !isFinite(f.lon)) return;
+      const km = U.haversineKm(lat, lon, f.lat, f.lon);
+      if (!best || km < best.km) best = { f, km };
+    });
+    if (best) best.dir = bearingTo(lat, lon, best.f.lat, best.f.lon);
+    return best;
+  }
+  let place = null, placeMk = null, placeLines = [];
+  const placeIcon = L.divIcon({ className: 'place-pin', iconSize: [26, 36], iconAnchor: [13, 35], popupAnchor: [0, -32],
+    html: '<svg width="26" height="36" viewBox="0 0 26 36" aria-hidden="true"><path d="M13 35S1.5 21.5 1.5 12.5a11.5 11.5 0 0 1 23 0C24.5 21.5 13 35 13 35z" fill="#2a6fdb" stroke="#fff" stroke-width="2"/><circle cx="13" cy="12.5" r="4.3" fill="#fff"/></svg>' });
+  function placePopup() {
+    const nf = nearestFire(place.lat, place.lon);
+    const loading = !S.fires.length && AUF.adapters.some(a => !S.byAdapter[a.id]);
+    const line = nf ? `Nearest fire on the map: <a href="${fireHref(nf.f.uid)}">${esc(prettyName(nf.f.name))}</a>, <strong>${kmTxt(nf.km)} ${nf.dir}</strong> (${esc(agencyStatus(nf.f))}${nf.f.alert ? ', ' + esc(ALERT_TXT[nf.f.alert]) : ''})`
+      : loading ? 'Fire feeds are still loading. Open this pin again in a moment.' : 'No fires are shown on the map right now.';
+    return `<div class="pop"><h5>${esc(place.label)}</h5>${place.sub ? `<div class="meta">${esc(place.sub)}</div>` : ''}<p class="near-line">${line}</p>${nf ? '<div class="meta" style="margin-top:4px">Measured to the fire\'s reported location, not its edge.</div>' : ''}<button type="button" class="linkbtn" data-place-clear>Remove pin</button></div>`;
+  }
+  // The dashed line points from the searched place to the nearest fire; redrawn with the pins as fires update.
+  function drawPlace() {
+    placeLines.forEach(l => L_place.removeLayer(l)); placeLines = [];
+    const nf = place && nearestFire(place.lat, place.lon);
+    if (!nf) return;
+    const ll = [[place.lat, place.lon], [nf.f.lat, nf.f.lon]];
+    placeLines = [L.polyline(ll, { color: '#fff', weight: 5, opacity: 0.6, interactive: false }), L.polyline(ll, { color: '#2a6fdb', weight: 2.5, dashArray: '6 6', interactive: false })];
+    placeLines.forEach(l => l.addTo(L_place));
+  }
+  function clearPlace() { place = null; placeMk = null; placeLines = []; L_place.clearLayers(); }
+  function showPlace(hit) {
+    place = hit;
+    if (placeMk) placeMk.setLatLng([hit.lat, hit.lon]);
+    else placeMk = L.marker([hit.lat, hit.lon], { icon: placeIcon, zIndexOffset: 20000, keyboard: false, place: true }).bindPopup(placePopup).addTo(L_place);
+    drawPlace();
+    // Zoom to the place; when the nearest fire is within 25 km, frame both.
+    const here = L.latLng(hit.lat, hit.lon), nf = nearestFire(hit.lat, hit.lon);
+    let center = here, zoom = Math.max(11, Math.min(map.getZoom(), 13));
+    if (nf && nf.km <= 25) { const b = L.latLngBounds([here, [nf.f.lat, nf.f.lon]]).pad(0.3); center = b.getCenter(); zoom = Math.min(13, map.getBoundsZoom(b)); }
+    map.closePopup();
+    map.once('moveend', () => { if (placeMk) placeMk.openPopup(); });
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) map.setView(center, zoom, { animate: false });
+    else map.flyTo(center, zoom, { duration: 1.1 });
+  }
+  map.on('popupopen', (e) => { const b = e.popup.getElement() && e.popup.getElement().querySelector('[data-place-clear]'); if (b) b.onclick = () => { map.closePopup(); clearPlace(); }; });
+  const PlaceSearch = L.Control.extend({
+    options: { position: 'topright' },
+    onAdd() {
+      const el = L.DomUtil.create('div', 'msearch leaflet-control');
+      el.innerHTML = `<form role="search" autocomplete="off"><label class="vh" for="msq">Search the map for a town, suburb or postcode</label><input type="search" id="msq" placeholder="Search a town or postcode" enterkeyhint="search" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="msq-list"><button type="submit" aria-label="Search">${ICON.search}</button></form><ul class="msq-list" id="msq-list" role="listbox" aria-label="Places" hidden></ul><p class="msq-msg" role="status" hidden></p>`;
+      L.DomEvent.disableClickPropagation(el); L.DomEvent.disableScrollPropagation(el);
+      return el;
+    },
+  });
+  (function wireSearch(el) {
+    const form = el.querySelector('form'), input = el.querySelector('input'), list = el.querySelector('.msq-list'), msg = el.querySelector('.msq-msg');
+    let hits = [], kind = 'place', active = -1, seq = 0, timer = 0;
+    const say = (t) => { msg.textContent = t || ''; msg.hidden = !t; };
+    const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; };
+    function show() {
+      list.innerHTML = hits.map((h, i) => `<li role="option" id="msq-${i}" data-i="${i}" aria-selected="${i === active}"><span>${esc(h.label)}</span>${h.sub ? `<span class="sub">${esc(h.sub)}</span>` : ''}</li>`).join('');
+      list.hidden = !hits.length; input.setAttribute('aria-expanded', String(!!hits.length));
+      if (active >= 0) input.setAttribute('aria-activedescendant', 'msq-' + active); else input.removeAttribute('aria-activedescendant');
+    }
+    function pick(i) {
+      const h = hits[i]; if (!h) return;
+      close(); say('');
+      input.value = h.label + (h.sub ? ', ' + h.sub : '');
+      input.blur(); // closes the phone keyboard so the map is visible
+      track('map_place_searched', { kind, results: hits.length });
+      showPlace(h);
+    }
+    async function lookup(q, go) {
+      const my = ++seq;
+      try {
+        const r = await findPlaces(q);
+        if (my !== seq) return; // a newer search has started
+        hits = r.hits; kind = r.kind; active = -1;
+        if (go && hits.length) { pick(0); return; }
+        show();
+        say(hits.length || !go ? '' : r.kind === 'coordinates' ? 'Those coordinates are outside Australia.' : r.kind === 'postcode' ? 'No postcode ' + q + ' found.' : 'No place found. Try the start of the name, e.g. "Katoo" for Katoomba.');
+      } catch (e) { if (my === seq) { close(); say('Place search is unavailable right now.'); } }
+    }
+    input.addEventListener('input', () => {
+      clearTimeout(timer); say('');
+      const q = input.value.trim();
+      // Suggestions for names and full postcodes; coordinates wait for Enter.
+      if (q.length < 2 || (/^-?\d/.test(q) && !/^\d{4}$/.test(q))) { seq++; hits = []; close(); return; }
+      timer = setTimeout(() => lookup(q, false), 250);
+    });
+    input.addEventListener('keydown', (e) => {
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && hits.length && !list.hidden) { e.preventDefault(); active = (active + (e.key === 'ArrowDown' ? 1 : hits.length - 1)) % hits.length; show(); }
+      else if (e.key === 'Escape') { close(); say(''); }
+    });
+    input.addEventListener('blur', close);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault(); clearTimeout(timer);
+      const q = input.value.trim(); if (!q) return;
+      if (!list.hidden && hits.length) { pick(active >= 0 ? active : 0); return; }
+      say('Searching…'); lookup(q, true);
+    });
+    list.addEventListener('mousedown', (e) => e.preventDefault()); // keep focus in the box while a suggestion is clicked
+    list.addEventListener('click', (e) => { const li = e.target.closest('li[data-i]'); if (li) pick(+li.dataset.i); });
+  })(new PlaceSearch().addTo(map).getContainer());
 
   // ---------- after render: wire controls, async enrichment ----------
   function persist() { prefs.ui = { extents: S.ui.extents, warnAreas: S.ui.warnAreas, show: S.ui.show }; prefs.table = Object.assign({}, S.table, { q: '', page: 1 }); savePrefs(); }

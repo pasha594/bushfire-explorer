@@ -24,7 +24,7 @@ Old `#/state/xx` links redirect to `/xx/` in the browser.
 | `src/app.js`, `src/app.css` | The app: data adapters, map, views and router |
 | `templates/page.html` | Page shell shared by every page |
 | `tools/build.mjs` | Builds the site into `dist/`: copies `public/` and `src/`, and generates the home page, `/fires-near-me/`, the state pages and `sitemap.xml` from the template |
-| `public/` | Files published as they are: `404.html`, `robots.txt`, `CNAME`, icons and link-preview image (`assets/`), `manifest.webmanifest`, Leaflet 1.9.4 and Leaflet.markercluster 1.5.3 (`lib/`), and the IndexNow key file (lets the site notify Bing and other engines of changed URLs) |
+| `public/` | Files published as they are: `404.html`, `robots.txt`, `CNAME`, icons and link-preview image (`assets/`), `manifest.webmanifest`, Leaflet 1.9.4, MapLibre GL and its Leaflet bridge (`lib/`), and the IndexNow key file (lets the site notify Bing and other engines of changed URLs) |
 | `.github/workflows/pages.yml` | Builds on every push and pull request; deploys `dist/` to GitHub Pages on pushes to `main`, then submits pages whose text changed to IndexNow |
 | `tools/indexnow.mjs` | IndexNow diff and submit (tells Bing and other engines, not Google, which pages changed) |
 
@@ -45,7 +45,7 @@ GitHub Pages must be set to deploy from GitHub Actions: **Settings → Pages →
 | Satellite hotspots | Geoscience Australia, DEA Hotspots (fallback: NASA FIRMS) · burnt areas in northern Australia: NAFI, Charles Darwin University |
 | Fire danger ratings | Australian Fire Danger Rating System, Bureau of Meteorology data via Esri Australia · state Total Fire Ban feeds |
 | Weather and air quality | [Open-Meteo](https://open-meteo.com) (CC BY 4.0), including CAMS air quality |
-| Location context | Australian Bureau of Statistics (ASGS), NVIS vegetation and CAPAD protected areas (DCCEEW) |
+| Location context and map search | Australian Bureau of Statistics (ASGS, including suburbs and localities and postcode areas for the map search box), NVIS vegetation and CAPAD protected areas (DCCEEW) |
 | Base map | [OpenFreeMap](https://openfreemap.org) (© OpenMapTiles, data © OpenStreetMap contributors), shaded relief from AWS Terrain Tiles (Mapzen); satellite view: [EOxCloudless](https://cloudless.eox.at) 2025 by EOX IT Services GmbH (contains modified Copernicus Sentinel data; CC BY-NC-SA 4.0) |
 
 Most data is licensed CC BY 4.0. Some sources (SA CFS, Emergency WA, DBCA, EOxCloudless satellite imagery) carry non-commercial or no-derivatives terms. The site is non-commercial and shows agency warning text unaltered. The NT doesn't publish a reusable incident feed, so NT fires appear as satellite hotspots and NAFI burnt areas only.
