@@ -3439,20 +3439,24 @@ AUF.util = (function () {
     return glReady;
   }
   const osmFallback = () => L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors' });
-  function glBase(style, dark) {
-    const g = L.layerGroup(), ATTR = OFM_ATTR + ' · ' + DEM_ATTR;
+  // opts.relief: add shaded relief under the labels. opts.pane: Leaflet pane. opts.fallback: raster layer without WebGL.
+  // style: a style URL, or a function returning a Promise of a style object.
+  function glBase(style, opts) {
+    const g = L.layerGroup(), ATTR = opts.attr;
     let isGl = false; // the bridge layer doesn't report its attribution to Leaflet, so add it here while shown
     g.on('remove', () => { if (isGl) map.attributionControl.removeAttribution(ATTR); });
     g.on('add', () => {
       if (isGl) map.attributionControl.addAttribution(ATTR);
       if (g.getLayers().length) return; // built on first use; re-adding the group re-adds it
-      if (!hasWebGL) { osmFallback().addTo(g); return; }
-      loadGL().then(() => {
+      const fallback = () => { if (!g.getLayers().length && opts.fallback) opts.fallback().addTo(g); };
+      if (!hasWebGL) { fallback(); return; }
+      loadGL().then(() => (typeof style === 'function' ? style() : style)).then((st) => {
         if (g.getLayers().length) return;
-        const gl = L.maplibreGL({ style: OFM + style, interactive: false, attributionControl: false });
+        const gl = L.maplibreGL({ style: st, interactive: false, attributionControl: false, pane: opts.pane || 'tilePane' });
         gl.addTo(g); isGl = true;
         if (map.hasLayer(g)) map.attributionControl.addAttribution(ATTR);
-        const m = gl.getMaplibreMap();
+        if (!opts.relief) return;
+        const m = gl.getMaplibreMap(), dark = opts.relief === 'dark';
         m.on('load', () => {
           try {
             const firstLabel = (m.getStyle().layers || []).find(l => l.type === 'symbol');
@@ -3462,17 +3466,23 @@ AUF.util = (function () {
               : { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': 'rgba(70,50,40,0.35)', 'hillshade-highlight-color': 'rgba(255,255,255,0.3)', 'hillshade-accent-color': 'rgba(70,50,40,0.15)' } }, firstLabel && firstLabel.id);
           } catch (e) { console.warn('[basemap relief]', e); }
         });
-      }).catch(e => { console.warn('[basemap]', e); if (!g.getLayers().length) osmFallback().addTo(g); });
+      }).catch(e => { console.warn('[basemap]', e); fallback(); });
     });
     return g;
   }
-  // Satellite: Esri World Imagery with Esri's place labels (each service's own copyrightText, …/MapServer?f=json).
-  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/', ESRI_ATTR = 'Powered by Esri · Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS user community';
-  const tl = (path, o) => L.tileLayer(ESRI + path + '/MapServer/tile/{z}/{y}/{x}', Object.assign({ maxZoom: 18, maxNativeZoom: 16 }, o));
+  // Satellite: EOxCloudless 2025, a cloud-free Sentinel-2 mosaic (10 m; free for non-commercial use, CC BY-NC-SA 4.0),
+  // with OpenFreeMap place labels (the dark style's label layers only) drawn above the fire overlays.
+  const EOX_ATTR = '<a href="https://cloudless.eox.at" target="_blank" rel="noopener">EOxCloudless</a> by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2025)';
+  const labelsOnly = () => fetch(OFM + 'dark').then(r => { if (!r.ok) throw new Error('style HTTP ' + r.status); return r.json(); })
+    .then(st => Object.assign(st, { layers: st.layers.filter(l => l.type === 'symbol' && l.layout && l.layout['text-field']) // text labels only, white on a dark halo so they read over imagery
+      .map(l => Object.assign(l, { paint: Object.assign({}, l.paint, { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.4 }) })) }));
   const BASE = {
-    light: glBase('positron', false),
-    dark: glBase('dark', true),
-    sat: L.layerGroup([tl('World_Imagery', { maxNativeZoom: 18, attribution: 'Imagery: Esri, Vantor, Earthstar Geographics, and the GIS User Community' }), tl('Canvas/World_Dark_Gray_Reference', { pane: 'labels', attribution: ESRI_ATTR })]),
+    light: glBase(OFM + 'positron', { relief: 'light', attr: OFM_ATTR + ' · ' + DEM_ATTR, fallback: osmFallback }),
+    dark: glBase(OFM + 'dark', { relief: 'dark', attr: OFM_ATTR + ' · ' + DEM_ATTR, fallback: osmFallback }),
+    sat: L.layerGroup([
+      L.tileLayer('https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/g/{z}/{y}/{x}.jpg', { maxZoom: 18, maxNativeZoom: 15, attribution: EOX_ATTR }),
+      glBase(labelsOnly, { pane: 'labels', attr: OFM_ATTR }),
+    ]),
   };
   const isDark = () => { const t = document.documentElement.getAttribute('data-theme'); return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
   let baseKey = null;
