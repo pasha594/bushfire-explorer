@@ -1,0 +1,27 @@
+name: Keep the fire schedule alive
+# GitHub turns off scheduled workflows in a public repository after 60 days without activity, which would stop the
+# fire pages refreshing in a quiet season (SEO audit A2: monthly keep-alive). Once a month this pushes an empty commit
+# to the keepalive branch, which counts as activity. It never touches main, and a push made with GITHUB_TOKEN doesn't
+# start other workflows.
+on:
+  schedule:
+    - cron: '17 3 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Push an empty commit to the keepalive branch
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          git init -q keepalive && cd keepalive
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q --allow-empty -m "Keep the scheduled fire build alive"
+          git push -q --force "https://x-access-token:${TOKEN}@github.com/${REPO}.git" HEAD:refs/heads/keepalive

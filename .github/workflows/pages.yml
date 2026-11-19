@@ -2,11 +2,16 @@ name: Build and deploy site
 # Builds dist/ with tools/build.mjs and publishes it to GitHub Pages. Only dist/ is published, so the template, build
 # script and README stay out of the live site. Pull requests and other branches build only (a check); pushes to main
 # also deploy, then tell IndexNow (Bing and other engines, not Google) which pages' text changed.
+# Every 15 minutes the same build runs on main to refresh the fire pages: tools/snapshot.mjs reads the NSW and
+# Queensland feeds (and the previous log from the live site) before tools/build.mjs writes the pages. GitHub runs
+# schedules on a best-effort basis, so runs can start late or be skipped at busy times.
 # Requires Settings > Pages > Source: "GitHub Actions".
 on:
   push:
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '7,22,37,52 * * * *' # off the hour, when fewer scheduled runs are dropped
 
 permissions:
   contents: read
@@ -25,6 +30,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+      - run: npm ci
+      # Fails only if the previous fire log can't be read back from the live site, so a deploy never forgets ended fires.
+      - run: node tools/snapshot.mjs
       - run: node tools/build.mjs
       # Compare with the live site before it is replaced; a failure here never blocks the deploy.
       - id: indexnow

@@ -20,6 +20,16 @@ ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 li a { display: inline-block; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 7px 11px; text-decoration: none; color: var(--ink); font-size: 14px; }
 .note { font-size: 14px; margin-top: 32px; }
 </style>
+<script>
+  // A fire page that isn't built (a fire newer than the last scheduled build, or one whose page has been removed)
+  // falls back to the live map's view of that fire, which says so if the agency no longer lists it. The ids follow
+  // tools/fire-pages.mjs: Queensland incident numbers (qf7-26-158562), NSW digits.
+  (function () {
+    var m = /^\/(nsw|qld)\/fire\/([a-z0-9-]+)\/?$/i.exec(location.pathname); if (!m) return;
+    var st = m[1].toLowerCase(), seg = m[2].toLowerCase(), q = st === 'qld' && /(?:^|-)(qf\d+-\d+-\d+)$/.exec(seg), d = /(?:^|-)(\d+)$/.exec(seg);
+    if (q || d) location.replace('/#/fire/' + encodeURIComponent(st + ':' + (q ? q[1].toUpperCase() : d[1])));
+  })();
+</script>
 </head>
 <body>
 <main>
