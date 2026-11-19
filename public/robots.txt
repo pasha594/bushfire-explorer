@@ -1,4 +1,6 @@
 User-agent: *
 Allow: /
+# The scheduled build's fire log (/data/pages.json stays open: the app reads it to link fire pages, Google's renderer too).
+Disallow: /data/fires.json
 
 Sitemap: https://bushfiremap.com/sitemap.xml

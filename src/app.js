@@ -738,6 +738,8 @@ AUF.util = (function () {
     homepage: 'https://www.fire.qld.gov.au/Current-Incidents',
     attribution: '© State of Queensland (Queensland Fire Department; Queensland Parks and Wildlife Service), CC BY 4.0',
     refreshMs: 180000, // ESCAD layer is refreshed by FME about every 5 minutes
+    // Field mappings shared with tools/snapshot.mjs, which reads the same ESCAD fields from QFD's open-data feed.
+    parse: { mapStatus, mapKind, mapAlert, typeLabel, pretty },
     async load() {
       const errors = [];
       const soft = (p, what) => p.catch(e => { errors.push(what + ': ' + (e && e.message || e)); return null; });
@@ -3354,9 +3356,16 @@ AUF.util = (function () {
   const agencyStatus = (f) => { const t = String(f.statusLabel || '').trim(); if (!t) return STATUS_TXT[f.status] || 'Not reported'; return t === t.toUpperCase() ? t.charAt(0) + t.slice(1).toLowerCase() : t; };
   const stCls = (f) => f.kind === 'planned' ? 'st-planned' : 'st-' + f.status;
   const isStale = (f) => f.updated && (Date.now() - Date.parse(f.updated)) > 3 * 864e5;
-  // State pages live at real paths (/nsw/ … /act/) so search engines can index them; fire and warning views stay in
-  // the #fragment of the home page.
-  const fireHref = (uid) => '/#/fire/' + encodeURIComponent(uid);
+  // State pages live at real paths (/nsw/ … /act/) so search engines can index them. Fires that the scheduled build
+  // has written a page for (NSW and Queensland, listed in /data/pages.json) link to that page, /{state}/fire/{name}-{id}/;
+  // other fires and all warnings stay in the #fragment of the home page.
+  // BAKED: the fire page this document was served as, if any: its uid, path, head tags and static content, which stand
+  // in while the feed loads and when the fire is no longer listed (an ended fire's page keeps its summary).
+  let PAGES = null, PAGES_REV = {};
+  const bakedEl = document.querySelector('#view [data-fire-uid]');
+  const BAKED = bakedEl ? { uid: bakedEl.getAttribute('data-fire-uid'), path: location.pathname.replace(/\/?$/, '/'), html: $('#view').innerHTML, title: document.title,
+    description: (document.querySelector('meta[name="description"]') || {}).content || '', robots: (document.querySelector('meta[name="robots"]') || {}).content || null } : null;
+  const fireHref = (uid) => PAGES && PAGES[uid] ? PAGES[uid][0] : '/#/fire/' + encodeURIComponent(uid);
   const stateHref = (st) => '/' + st.toLowerCase() + '/';
   const adapterFor = (x) => AUF.adapters.find(a => a.id === String(x.uid).split(':')[0]) || {};
 
@@ -3697,7 +3706,17 @@ AUF.util = (function () {
   const STATE_PATH = /^\/(nsw|vic|qld|sa|wa|tas|nt|act)\/?$/i;
   const pathState = (path) => { const m = STATE_PATH.exec(path || ''); return m ? m[1].toUpperCase() : null; };
   const NEAR_PATH = /^\/fires-near-me\/?$/;
-  // The route comes from the path (/nsw/) unless the #fragment names a fire, warning or state.
+  const FIRE_PATH = /^\/(nsw|vic|qld|sa|wa|tas|nt|act)\/fire\/([a-z0-9-]+)\/?$/i;
+  // A fire page's uid: the page itself says (data-fire-uid), else /data/pages.json, else the id at the end of the path
+  // (Queensland incident numbers look like qf7-26-158562, NSW ones are digits). tools/fire-pages.mjs and 404.html agree.
+  function firePathUid(path, m) {
+    const p = path.replace(/\/?$/, '/'), st = m[1].toLowerCase(), seg = m[2].toLowerCase();
+    if (BAKED && BAKED.path === p) return BAKED.uid;
+    if (PAGES_REV[p]) return PAGES_REV[p];
+    const q = st === 'qld' && /(?:^|-)(qf\d+-\d+-\d+)$/.exec(seg), d = /(?:^|-)(\d+)$/.exec(seg);
+    return st + ':' + (q ? q[1].toUpperCase() : d ? d[1] : seg);
+  }
+  // The route comes from the path (/nsw/, /nsw/fire/…) unless the #fragment names a fire, warning or state.
   function parseHash() {
     let h = (location.hash || '').replace(/^#/, '');
     try { h = decodeURIComponent(h); } catch (e) { /* a truncated link ("%3"): keep the raw text */ }
@@ -3706,20 +3725,22 @@ AUF.util = (function () {
     if ((m = h.match(/^\/fire\/(.+)$/))) return { view: 'fire', uid: m[1] };
     if ((m = h.match(/^\/warning\/(.+)$/))) return { view: 'warning', uid: m[1] };
     if (/^[a-z]{2,3}:.+/.test(h)) return { view: 'fire', uid: h }; // legacy #nsw:123 links
+    const fp = FIRE_PATH.exec(location.pathname);
+    if (fp) return { view: 'fire', uid: firePathUid(location.pathname, fp) };
     const ps = pathState(location.pathname);
     if (ps) return { view: 'state', st: ps };
     if (NEAR_PATH.test(location.pathname)) return { view: 'near' };
     if ((m = h.match(/^\/(top|states)$/))) return { view: 'home', anchor: m[1] === 'top' ? 'top-fires' : 'states' };
     return { view: 'home' };
   }
-  // Old #/state/nsw links (and /nsw/#/state/nsw) move to the state's real path without a new history entry.
+  // Old #/state/nsw links (and /nsw/#/state/nsw) move to the state's real path, and #/fire/{uid} links to the fire's
+  // page once /data/pages.json lists one, without a new history entry.
   function canonicalizeUrl() {
     let h = location.hash || '';
     try { h = decodeURIComponent(h); } catch (e) { /* keep raw */ }
-    const m = h.match(/^#\/state\/([a-z]+)\/?$/i);
-    if (m && STATES.includes(m[1].toUpperCase())) {
-      try { history.replaceState(history.state, '', stateHref(m[1].toUpperCase())); } catch (e) { /* file:// or sandboxed: keep the hash route */ }
-    }
+    const m = h.match(/^#\/state\/([a-z]+)\/?$/i), f = h.match(/^#\/fire\/(.+)$/);
+    const to = m && STATES.includes(m[1].toUpperCase()) ? stateHref(m[1].toUpperCase()) : f && PAGES && PAGES[f[1]] ? PAGES[f[1]][0] : null;
+    if (to) { try { history.replaceState(history.state, '', to); } catch (e) { /* file:// or sandboxed: keep the hash route */ } }
   }
   // Same-site links to the home page or a state page change the URL without reloading the app (feeds stay loaded).
   function inAppUrl(a) {
@@ -3727,7 +3748,7 @@ AUF.util = (function () {
     if (!href || href.charAt(0) !== '/' || href.charAt(1) === '/' || a.target === '_blank' || a.hasAttribute('download')) return null;
     let u; try { u = new URL(href, location.href); } catch (e) { return null; }
     if (u.origin !== location.origin || u.search) return null;
-    return u.pathname === '/' || pathState(u.pathname) || NEAR_PATH.test(u.pathname) ? u : null;
+    return u.pathname === '/' || pathState(u.pathname) || NEAR_PATH.test(u.pathname) || FIRE_PATH.test(u.pathname) ? u : null;
   }
   // Each history entry gets a key in history.state, so Back/Forward (not a fresh click) restores that entry's list
   // page and scroll position. Scroll restoration is manual so the browser's own restore doesn't fight the re-render.
@@ -3873,15 +3894,16 @@ AUF.util = (function () {
         : `Live ${STATE_NAME[st]} bushfire map: incidents and warnings from ${STATE_AGENCY[st] || (ad && ad.label) || 'the state fire agency'}, fire danger ratings and total fire bans.` };
   }
   const STATE_AGENCY = { NSW: 'NSW Rural Fire Service', VIC: 'VicEmergency (CFA, DEECA and FRV)', QLD: 'Queensland Fire Department', SA: 'SA Country Fire Service and MFS', WA: 'Emergency WA (DFES) and DBCA', TAS: 'Tasmania Fire Service', ACT: 'ACT Emergency Services Agency' };
-  // A view whose fire or warning isn't listed asks search engines not to index it (it is a soft error page).
-  function setHead(meta, noindex) {
+  // robots: null (indexable), or the robots meta value, e.g. 'noindex' for a view whose fire or warning isn't listed (a
+  // soft error page) or 'noindex, follow' for a minor fire's page.
+  function setHead(meta, robots) {
     document.title = meta.title;
     const tag = (sel, make) => document.head.querySelector(sel) || document.head.appendChild(make());
     tag('meta[name="description"]', () => Object.assign(document.createElement('meta'), { name: 'description' })).setAttribute('content', meta.description);
     tag('link[rel="canonical"]', () => Object.assign(document.createElement('link'), { rel: 'canonical' })).setAttribute('href', 'https://bushfiremap.com' + meta.path);
     let rb = document.head.querySelector('meta[name="robots"]');
-    if (noindex && !rb) { rb = document.createElement('meta'); rb.name = 'robots'; rb.content = 'noindex'; document.head.appendChild(rb); }
-    else if (!noindex && rb) rb.remove();
+    if (robots) { if (!rb) { rb = document.createElement('meta'); rb.name = 'robots'; document.head.appendChild(rb); } rb.content = robots; }
+    else if (rb) rb.remove();
   }
   function renderView(isNav, fromRefresh) {
     const view = $('#view'), active = document.activeElement;
@@ -3900,13 +3922,20 @@ AUF.util = (function () {
     if (!isNav) KEEP.forEach(id => { const el = document.getElementById(id); if (el && !isPlaceholder(el)) keep[id] = [el.innerHTML, el.getAttribute('style')]; });
     mountMap(null); // park the map before replacing markup
     const r = S.route;
-    let html = '', meta = pageMeta(r.view === 'state' ? r.st : null), missing = false;
+    let html = '', meta = pageMeta(r.view === 'state' ? r.st : null), robots = null;
     if (r.view === 'state') html = stateView(r.st);
     else if (r.view === 'near') { html = nearView(); meta = { path: '/fires-near-me/', title: 'Fires near me: live bushfire map of Australia - Bushfire Explorer', description: 'Find bushfires near your location, or choose a state or town.' }; }
-    else if (r.view === 'fire') { const f = S.fireByUid.get(r.uid); html = fireView(f, r.uid); trackFire(f); missing = !f; if (f) meta.title = `${prettyName(f.name)}, ${STATE_NAME[f.state]}: map and status - Bushfire Explorer`; }
-    else if (r.view === 'warning') { const w = S.warnings.find(x => x.uid === r.uid); html = warningView(w, r.uid); trackWarning(w); missing = !w; if (w) meta.title = `${w.title || ALERT_TXT[w.alert]} (${w.state} ${ALERT_TXT[w.alert] || 'warning'}) - Bushfire Explorer`; }
+    else if (r.view === 'fire') {
+      // A fire's own page keeps the head tags it was served with; its static content shows until the feed lists the fire.
+      const f = S.fireByUid.get(r.uid), baked = BAKED && BAKED.uid === r.uid, pg = PAGES && PAGES[r.uid];
+      html = !f && baked ? BAKED.html : fireView(f, r.uid); trackFire(f);
+      if (baked) { meta = { path: BAKED.path, title: BAKED.title, description: BAKED.description }; robots = BAKED.robots; }
+      else if (!f) robots = 'noindex';
+      else { meta.title = `${prettyName(f.name)}, ${STATE_NAME[f.state]}: map and status - Bushfire Explorer`; if (pg) { meta.path = pg[0]; robots = pg[1] ? null : 'noindex, follow'; } }
+    }
+    else if (r.view === 'warning') { const w = S.warnings.find(x => x.uid === r.uid); html = warningView(w, r.uid); trackWarning(w); robots = w ? null : 'noindex'; if (w) meta.title = `${w.title || ALERT_TXT[w.alert]} (${w.state} ${ALERT_TXT[w.alert] || 'warning'}) - Bushfire Explorer`; }
     else html = homeView();
-    setHead(meta, missing);
+    setHead(meta, robots);
     view.innerHTML = html;
     Object.keys(keep).forEach(id => { const el = document.getElementById(id); if (el && isPlaceholder(el)) { el.innerHTML = keep[id][0]; if (keep[id][1]) el.setAttribute('style', keep[id][1]); } });
     mountMap($('.mapslot', view));
@@ -4576,13 +4605,11 @@ AUF.util = (function () {
     const windWord = n.windKmh == null ? 'Wind' : n.windKmh < 6 ? 'Calm' : n.windKmh < 20 ? 'Light wind' : n.windKmh < 40 ? 'Moderate wind' : n.windKmh < 62 ? 'Strong wind' : 'Gale-force wind';
     return `<div class="rightnow"><div class="temp">${wxIcon(n.code)}<span>${n.tempC != null ? Math.round(n.tempC) : '—'}<sup>°C</sup></span></div><div class="cond">${esc(n.text || '')}</div><div class="updated-line">Humidity ${n.rh != null ? Math.round(n.rh) + '%' : '—'}${w.past && w.past.precip24hMm != null ? ' · ' + w.past.precip24hMm.toFixed(1) + ' mm rain in 24 h' : ''}</div></div>
       <div class="tiles2"><div><span class="circ">${arrow}</span><div class="tl"><b>${windWord}</b><span>${n.windKmh != null ? Math.round(n.windKmh) + ' km/h' : '—'} · ${esc(n.windDir || '')}${n.gustKmh != null ? ' · gusts ' + Math.round(n.gustKmh) : ''}</span></div></div>
-        <div>${a && a.pm25 != null ? `<span class="circ" style="background:${esc(a.color || '#ccc')};color:${/very|extreme/i.test(a.category) ? '#fff' : '#111'}">${Math.round(a.pm25)}</span><div class="tl"><b>${esc(a.category)}</b><span>Air quality · PM2.5 µg/m³</span></div>` : '<div class="tl"><b>—</b><span>Air quality</span></div>'}</div></div>
-      <p class="attrib"><a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a> (CC BY 4.0)${a && a.pm25 != null ? ' · Air quality: Copernicus Atmosphere Monitoring Service via Open-Meteo' : ''}</p>`;
+        <div>${a && a.pm25 != null ? `<span class="circ" style="background:${esc(a.color || '#ccc')};color:${/very|extreme/i.test(a.category) ? '#fff' : '#111'}">${Math.round(a.pm25)}</span><div class="tl"><b>${esc(a.category)}</b><span>Air quality · PM2.5 µg/m³</span></div>` : '<div class="tl"><b>—</b><span>Air quality</span></div>'}</div></div>`; // credited in the Sources dialog and footer, like every other feed
   }
   function wxHtml(w, f) {
     if (!w || !w.daily || !w.daily.length) return '<div class="err">Forecast unavailable right now.</div>';
-    return `<div class="days4">${w.daily.slice(0, 4).map(d => `<div><div class="dn">${esc(dayLabel(d.date, w.tz || f.state))}</div>${wxIcon(d.code)}<div class="hi">${d.tMaxC != null ? Math.round(d.tMaxC) + '°' : '—'}</div><div class="lo">${d.tMinC != null ? Math.round(d.tMinC) + '°' : ''}</div><div class="xs">${d.windMaxKmh != null ? Math.round(d.windMaxKmh) + ' km/h ' + esc(d.windDirDominant || '') : ''}${d.rhMin != null ? '<br>RH ' + Math.round(d.rhMin) + '%' : ''}${d.precipMm ? '<br>' + d.precipMm.toFixed(1) + ' mm' : ''}</div></div>`).join('')}</div>
-      <p class="attrib"><a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a> (CC BY 4.0)</p>`;
+    return `<div class="days4">${w.daily.slice(0, 4).map(d => `<div><div class="dn">${esc(dayLabel(d.date, w.tz || f.state))}</div>${wxIcon(d.code)}<div class="hi">${d.tMaxC != null ? Math.round(d.tMaxC) + '°' : '—'}</div><div class="lo">${d.tMinC != null ? Math.round(d.tMinC) + '°' : ''}</div><div class="xs">${d.windMaxKmh != null ? Math.round(d.windMaxKmh) + ' km/h ' + esc(d.windDirDominant || '') : ''}${d.rhMin != null ? '<br>RH ' + Math.round(d.rhMin) + '%' : ''}${d.precipMm ? '<br>' + d.precipMm.toFixed(1) + ' mm' : ''}</div></div>`).join('')}</div>`;
   }
   function fdrHtml(d, f) {
     if (!d) return '<div class="err">Fire danger ratings unavailable right now.</div>';
@@ -4721,5 +4748,14 @@ AUF.util = (function () {
   trackRoute(S.route);
   if (S.route.anchor) requestAnimationFrame(reScroll);
   tick(true);
+  // Which fires have their own page. Links switch to those pages once it arrives; until then (or without it) they use
+  // the #/fire/ route, which always works.
+  fetch('/data/pages.json').then(r => (r.ok ? r.json() : null)).then(j => {
+    if (!j || typeof j !== 'object') return;
+    PAGES = j; PAGES_REV = {}; Object.keys(j).forEach(uid => { PAGES_REV[j[uid][0]] = uid; });
+    canonicalizeUrl(); // a #/fire/ link moves to the fire's page
+    if (S.route.view === 'fire' && parseHash().uid !== S.route.uid) onRoute(); // a uid guessed from the path is corrected
+    else scheduleRender();
+  }).catch(() => { /* links keep the #/fire/ form */ });
 })();
 

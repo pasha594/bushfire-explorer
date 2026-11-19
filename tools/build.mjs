@@ -5,13 +5,18 @@
 // (app.js) replaces <main> when it starts.
 //
 // The asset version in every page is a hash of app.js and app.css, so browsers fetch them again when they change.
-//   node tools/build.mjs
+//
+// With snapshot/fires.json (written by tools/snapshot.mjs) it also writes a page per NSW and Queensland fire
+// (tools/fire-pages.mjs), lists those fires on the state and home pages, adds major fires to the sitemap, and publishes
+// the log as /data/fires.json (the next snapshot reads it back) and /data/pages.json (the app's fire id -> path map).
+//   node tools/snapshot.mjs && node tools/build.mjs
 // No dependencies. dist/ is not committed: the GitHub Actions workflow (.github/workflows/pages.yml) builds and
 // deploys it to GitHub Pages on every push to main.
-import { readFileSync, writeFileSync, mkdirSync, rmSync, cpSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, cpSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildFirePages } from './fire-pages.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ORIGIN = 'https://bushfiremap.com';
@@ -59,11 +64,12 @@ const NEAR = {
 };
 
 const ldScript = (obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/</g, '\\u003c')}</script>`;
-function head(meta, ld) {
+function head(meta, ld, robots) {
   const url = ORIGIN + meta.path;
   return [
     `<title>${esc(meta.title)}</title>`,
     `<meta name="description" content="${esc(meta.description)}">`,
+    ...(robots ? [`<meta name="robots" content="${esc(robots)}">`] : []),
     `<link rel="canonical" href="${url}">`,
     `<meta property="og:type" content="website">`,
     `<meta property="og:site_name" content="${SITE}">`,
@@ -83,6 +89,13 @@ function head(meta, ld) {
 const WEBSITE = { '@type': 'WebSite', '@id': ORIGIN + '/#website', name: SITE, alternateName: 'bushfiremap.com', url: ORIGIN + '/', inLanguage: 'en-AU' };
 const webPage = (meta) => ({ '@type': 'WebPage', '@id': ORIGIN + meta.path + '#webpage', url: ORIGIN + meta.path, name: meta.title, description: meta.description, inLanguage: 'en-AU', isPartOf: { '@id': WEBSITE['@id'] } });
 
+// The fire snapshot. The CI build always has one (the workflow runs tools/snapshot.mjs first); a local build without
+// one just leaves out the fire pages and lists.
+const SNAP = join(ROOT, 'snapshot', 'fires.json');
+if (!existsSync(SNAP) && process.env.GITHUB_ACTIONS) throw new Error('snapshot/fires.json missing: run node tools/snapshot.mjs first');
+const LOG = existsSync(SNAP) ? JSON.parse(readFileSync(SNAP, 'utf8')) : null;
+if (!LOG) console.warn('build: no snapshot/fires.json, so no fire pages (run node tools/snapshot.mjs for them)');
+
 const stateLinks = (except) => `<ul class="shell-links">${STATES.filter(s => s !== except).map(s => `<li><a href="${slug(s)}">${esc(s.name)} fire map</a></li>`).join('')}</ul>`;
 // The map placeholder keeps the page's layout close to the app's, so the swap when the app starts doesn't jump.
 const MAP_PLACEHOLDER = '<div class="mapcard shell-map" aria-hidden="true"><div class="mapbar"></div><div class="mapslot"></div></div>';
@@ -97,8 +110,9 @@ ${NOSCRIPT}
 <section class="section shell-text">
 <p>Bushfire Explorer is a free, unofficial live map of bushfires across Australia. It puts incidents and warnings from every state and territory fire agency on one map: the NSW Rural Fire Service, VicEmergency, the Queensland Fire Department, the SA Country Fire Service, Emergency WA, the Tasmania Fire Service and the ACT Emergency Services Agency.</p>
 <p>The map adds satellite hotspots from Geoscience Australia's DEA Hotspots, burnt areas in northern Australia from NAFI, Australian Fire Danger Rating System forecasts for every fire weather district, and each state's total fire ban status. Every fire has its own page with the agency's status and warning, size, mapped perimeter, nearby hotspots, weather and air quality.</p>
-<p>Your browser fetches the data directly from each agency's public feed and refreshes it every one to five minutes. The Northern Territory doesn't publish a reusable incident feed, so NT fires appear as satellite hotspots and burnt areas only.</p>
+<p>The live map in your browser fetches each agency's public feed directly and refreshes it every one to five minutes. Pages for individual NSW and Queensland fires are also rebuilt from those agencies' feeds about every 15 minutes. The Northern Territory doesn't publish a reusable incident feed, so NT fires appear as satellite hotspots and burnt areas only.</p>
 <p><a href="/fires-near-me/">Find fires near me</a></p>
+${FIRES ? FIRES.homeList : ''}
 <h2>Fire maps by state and territory</h2>
 ${stateLinks(null)}
 ${EMERGENCY}
@@ -118,6 +132,7 @@ ${NOSCRIPT}
 <section class="section shell-text">
 <p>${st.agency ? `Incidents and warnings on this page come from ${esc(st.agency)}. ` : ''}Fire danger ratings come from the Australian Fire Danger Rating System, and satellite hotspots from Geoscience Australia's DEA Hotspots. Your browser fetches each feed directly and refreshes it every few minutes.</p>
 <p>Official information: <a href="${st.official}" rel="noopener">${esc(st.officialName)}</a>.</p>
+${FIRES && FIRES.stateList[st.id] ? FIRES.stateList[st.id] : ''}
 <h2>Other states and territories</h2>
 ${stateLinks(st)}
 ${EMERGENCY}
@@ -144,6 +159,7 @@ ${EMERGENCY}
 const ASSET_V = createHash('sha1').update(read('src/app.js')).update(read('src/app.css')).digest('hex').slice(0, 10);
 const TEMPLATE = read('templates/page.html');
 const page = (headHtml, mainHtml) => TEMPLATE.replace('{{HEAD}}', headHtml).replace('{{MAIN}}', mainHtml).replace(/\{\{V\}\}/g, ASSET_V);
+const FIRES = LOG ? buildFirePages(LOG, { esc, page, head, ORIGIN, WEBSITE, webPage, MAP_PLACEHOLDER, NOSCRIPT, EMERGENCY }) : null;
 
 const breadcrumbs = (st) => ({ '@type': 'BreadcrumbList', itemListElement: [
   { '@type': 'ListItem', position: 1, name: 'Australia', item: ORIGIN + '/' },
@@ -159,10 +175,19 @@ write('fires-near-me/index.html', page(head(NEAR, { '@context': 'https://schema.
   { '@type': 'ListItem', position: 1, name: 'Australia', item: ORIGIN + '/' },
   { '@type': 'ListItem', position: 2, name: 'Fires near me', item: ORIGIN + NEAR.path },
 ] } })] }), nearMain()));
-// No <lastmod>: Google uses it only when it is consistently accurate, and these pages' text doesn't change with fire activity yet.
+// Fire pages, the published log (the next snapshot's starting point) and the app's id -> path map.
+if (FIRES) {
+  for (const p of FIRES.pages) write(p.path.slice(1) + 'index.html', p.html);
+  write('data/fires.json', JSON.stringify(LOG));
+  write('data/pages.json', JSON.stringify(FIRES.index));
+}
+// No <lastmod> on the fixed pages: Google uses it only when it is consistently accurate, and their text doesn't change
+// with fire activity yet. Major fire pages carry the time their facts last changed.
 write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${[HOME.path, NEAR.path, ...STATES.map(slug)].map(p => `  <url><loc>${ORIGIN}${p}</loc></url>`).join('\n')}
+${FIRES ? FIRES.sitemap.map(s => `  <url><loc>${ORIGIN}${s.path}</loc><lastmod>${s.lastmod}</lastmod></url>`).join('\n') : ''}
 </urlset>
-`);
-console.log(`Built dist/: index.html, fires-near-me, ${STATES.length} state pages and sitemap.xml (assets v=${ASSET_V}).`);
+`.replace(/\n\n<\/urlset>/, '\n</urlset>'));
+const nFire = FIRES ? Object.keys(FIRES.index).length : 0;
+console.log(`Built dist/: index.html, fires-near-me, ${STATES.length} state pages, ${nFire} fire pages (${FIRES ? FIRES.sitemap.length : 0} in the sitemap) and sitemap.xml (assets v=${ASSET_V}).`);

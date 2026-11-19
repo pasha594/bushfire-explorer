@@ -1,0 +1,12 @@
+{
+  "name": "bushfire-explorer",
+  "private": true,
+  "description": "Build tools for bushfiremap.com. The site itself has no runtime dependencies.",
+  "scripts": {
+    "snapshot": "node tools/snapshot.mjs",
+    "build": "node tools/build.mjs"
+  },
+  "devDependencies": {
+    "@xmldom/xmldom": "0.9.12"
+  }
+}

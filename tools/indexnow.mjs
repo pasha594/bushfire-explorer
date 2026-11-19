@@ -4,8 +4,8 @@
 //   node tools/indexnow.mjs diff  > changed.txt   # before deploy: sitemap URLs whose built HTML differs from the live page
 //   node tools/indexnow.mjs ping  < changed.txt   # after deploy: submit those URLs (does nothing for an empty list)
 //
-// A page counts as changed only if its text changed: the ?v= asset version is ignored, so a script-only release
-// pings nothing. New pages (404 on the live site) count as changed. No dependencies; Node 18+ (global fetch).
+// A page counts as changed only if its text changed: the ?v= asset version and per-run times are ignored, so a
+// script-only release or a scheduled run with no new facts pings nothing. New pages (404 on the live site) count as changed. No dependencies; Node 18+ (global fetch).
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +17,8 @@ const keyFile = readdirSync(join(ROOT, 'public')).find(f => /^[0-9a-f]{32}\.txt$
 if (!keyFile) throw new Error('IndexNow key file (public/<32 hex>.txt) not found');
 const KEY = keyFile.slice(0, -4);
 
-const normalise = (html) => html.replace(/\?v=[0-9a-f]+/g, '?v=').replace(/\s+/g, ' ').trim();
+// Times that change on every scheduled run ("as at", "last received") sit between <!--v--> and <!--/v--> and are ignored.
+const normalise = (html) => html.replace(/<!--v-->[\s\S]*?<!--\/v-->/g, '').replace(/\?v=[0-9a-f]+/g, '?v=').replace(/\s+/g, ' ').trim();
 
 async function diff() {
   const sitemap = readFileSync(join(DIST, 'sitemap.xml'), 'utf8');

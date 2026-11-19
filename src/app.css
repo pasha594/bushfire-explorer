@@ -461,6 +461,16 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
 .shell-links a:hover { border-color: var(--ink-3); }
 .shell-note { font-size: 14px; color: var(--ink-3); margin: 22px 0 0; }
 .shell-links + .shell-note { margin-top: 28px; }
+/* fire pages and fire lists (tools/fire-pages.mjs) */
+.shell-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0 0 18px; font-size: 15px; }
+.shell-facts dt { color: var(--ink-3); }
+.shell-facts dd { margin: 0; }
+.shell-warn { border-left: 4px solid var(--ad); background: var(--card); border-radius: 0 10px 10px 0; padding: 14px 18px; margin: 0 0 18px; }
+.shell-warn p { color: var(--ink); }
+.shell-warn .shell-note { color: var(--ink-3); margin-top: 6px; }
+.shell-fires { display: grid; gap: 6px; }
+.shell-fires li span { color: var(--ink-3); font-size: 13.5px; margin-left: 6px; }
+@media (max-width: 520px) { .shell-facts { grid-template-columns: 1fr; gap: 2px; } .shell-facts dd { margin-bottom: 8px; } }
 .attrib { font-size: 12.5px; line-height: 1.45; color: var(--ink-3); margin: 10px 0 0; }
 .attrib a { color: inherit; }
 
