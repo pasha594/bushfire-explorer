@@ -110,6 +110,35 @@ main { display: block; max-width: 1120px; margin: 0 auto; padding: 28px 20px 56p
 .legend-inline { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-left: auto; font-size: 12.5px; color: var(--ink-2); align-items: center; }
 .legend-inline i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.2); }
 .legend-inline svg { vertical-align: -3px; margin-right: 4px; }
+.lg-scar { display: inline-flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.scarbar { display: inline-flex; border-radius: 4px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.2); }
+.legend-inline .scarbar i { display: grid; place-items: center; width: 17px; height: 17px; margin: 0; border: 0; border-radius: 0; font: 700 10px/1 var(--sans); font-style: normal; vertical-align: 0; }
+.lg-note { color: var(--ink-3); }
+
+/* map credits: folded behind an "i" button after the first interaction (or a few seconds) */
+.leaflet-bottom.leaflet-right { display: flex; align-items: flex-end; gap: 4px; padding: 0 4px 4px 0; }
+.leaflet-bottom.leaflet-right .leaflet-control-attribution { margin: 0; float: none; border-radius: 6px; max-width: min(560px, calc(100vw - 90px)); }
+.leaflet-bottom.leaflet-right:not(.attr-open) .leaflet-control-attribution { display: none; }
+.attr-btn { pointer-events: auto; flex: none; width: 24px; height: 24px; border-radius: 50%; border: 0; padding: 0; display: grid; place-items: center; background: rgba(255,255,255,.88); color: #333; font: italic 700 14px/1 Georgia, serif; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+.attr-open .attr-btn { background: #fff; }
+
+/* map search (Leaflet control, top right) */
+.msearch { position: relative; width: min(290px, calc(100vw - 110px)); font: 15px/1.3 var(--sans); }
+.msearch form { display: flex; background: var(--card); color: var(--ink); border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.35); overflow: hidden; }
+.msearch input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 9px 4px 9px 12px; font-size: 16px; outline: none; }
+.msearch input::-webkit-search-cancel-button { cursor: pointer; }
+.msearch form:focus-within { box-shadow: 0 0 0 2px var(--gold), 0 2px 8px rgba(0,0,0,.35); }
+.msearch form button { flex: none; border: 0; background: transparent; width: 40px; display: grid; place-items: center; cursor: pointer; color: var(--ink-2); }
+.msearch form button svg { width: 18px; height: 18px; }
+.msq-list { list-style: none; margin: 6px 0 0; padding: 4px; background: var(--card); color: var(--ink); border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.35); max-height: 260px; overflow-y: auto; }
+.msq-list li { padding: 8px 10px; border-radius: 7px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
+.msq-list li[aria-selected="true"], .msq-list li:hover { background: var(--card-3); }
+.msq-list .sub { color: var(--ink-3); font-size: 12.5px; white-space: nowrap; align-self: center; }
+.msq-msg { margin: 6px 0 0; padding: 7px 10px; background: var(--card); color: var(--ink-2); border-radius: 8px; font-size: 13.5px; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.place-pin { background: none; border: 0; }
+.place-pin svg { display: block; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+.pop .near-line { margin: 8px 0 0; font-size: 14px; }
+.pop .linkbtn { margin-top: 8px; }
 .tabs2 { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
 .tabs2 button { border: 0; background: var(--card-2); padding: 15px; font: 700 15px/1 var(--sans); cursor: pointer; color: var(--ink-3); display: flex; gap: 8px; justify-content: center; align-items: center; }
 .tabs2 button svg { width: 18px; height: 18px; }
@@ -374,19 +403,6 @@ dialog.sources::backdrop { background: rgba(10, 8, 9, .55); }
   .sw-row, .legend-inline { margin-left: 0; }
   .divider span { padding: 7px 26px 9px; }
 }
-
-/* ---------- fire clusters (leaflet.markercluster; its tiny stylesheet inlined) ---------- */
-.leaflet-cluster-anim .leaflet-marker-icon, .leaflet-cluster-anim .leaflet-marker-shadow { transition: transform .3s ease-out, opacity .3s ease-in; }
-.leaflet-cluster-spider-leg { transition: stroke-dashoffset .3s ease-out, stroke-opacity .3s ease-in; }
-@media (prefers-reduced-motion: reduce) { .leaflet-cluster-anim .leaflet-marker-icon, .leaflet-cluster-spider-leg { transition: none; } }
-.clu-wrap { background: none; border: 0; }
-.clu { border-radius: 50%; display: grid; place-items: center; background: var(--gold-fill); color: #2a1d06; border: 2px solid rgba(30,20,10,.55); box-shadow: 0 0 0 4px rgba(246,196,106,.35), 0 2px 5px rgba(0,0,0,.45); font: 700 13px/1 var(--sans); font-variant-numeric: tabular-nums; cursor: pointer; }
-.clu.rx { background: #cbbfa4; box-shadow: 0 0 0 4px rgba(203,191,164,.35), 0 2px 5px rgba(0,0,0,.45); }
-.clu.ctl { background: #9db89f; box-shadow: 0 0 0 4px rgba(157,184,159,.35), 0 2px 5px rgba(0,0,0,.45); }
-.clu.lv1 { box-shadow: 0 0 0 4px #f2cd00, 0 2px 5px rgba(0,0,0,.45); }
-.clu.lv2 { box-shadow: 0 0 0 4px #f07f00, 0 2px 5px rgba(0,0,0,.45); }
-.clu.lv3 { box-shadow: 0 0 0 4px #d2232a, 0 2px 5px rgba(0,0,0,.45); }
-.lg-clu { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--gold-fill); color: #2a1d06; font: 700 10px/1 var(--sans); border: 1.5px solid rgba(30,20,10,.55); box-shadow: 0 0 0 2px #f2cd00; margin-right: 6px; vertical-align: -4px; }
 
 /* ---------- ranking table: one toolbar (search, type, under control, updated) + columns ---------- */
 .rtools { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; padding: 12px 14px; background: var(--card-2); border-bottom: 1px solid var(--line); }
